@@ -1,3 +1,4 @@
+rm(list=ls())
 source("../r-toolkit/checks.R")
 source("../r-toolkit/logs.R")
 
@@ -6,15 +7,21 @@ source("../r-toolkit/logs.R")
 # Define DATAPOINT to be a list(xt, yt) where xt = px1 vector, yt=1dim value
 # Then a DATASET is a list (X, Y) where X=(niters x p) and Y = niters x 1
 #
-# Create an EXPERIMENT. This is comprised by 
+# Create an EXPERIMENT (stochastic approximation). This is comprised by 
 #   "theta.star" = # (px1) vector of real values, 
 #   niters = (#iterations), 
 #   sample.dataset() = samples DATASET object
 #   score.function = \nabla loglik(theta, data_t) = score function
+#   learning.rate = function (t, ...) = gives the learning rate > 0
 #
-# An OnlineAlgorithm is defined by a function that accepts a DATASET 
-# and returns an OnlineOutput object:
-#   estimates = (niters x p) matrix of estimate i.e. (theta_t)
+# An OnlineAlgorithm is defined by a function that accepts 
+#   t = no. of iteration
+#   theta.old = vector of current estimate
+#   datapoint  = DATAPOINT object at t (xt vector, yt value)
+#   experiment = EXPERIMENT object, has learning rate/score function
+# The object returns an OnlineOutput object:
+#   estimates = (p  x niters) matrix of estimate i.e. (theta_t)
+#   last = last vector of estimates
 #
 # An OnlineExperiment is defined by
 #   OnlineAlgorithm + EXPERIMENT
@@ -25,7 +32,31 @@ source("../r-toolkit/logs.R")
 get.dataset.point <- function(dataset, t) {
   CHECK_TRUE(nrow(dataset$X) >= t && nrow(dataset$Y) >= t)
   return(list(xt=dataset$X[t, ],
-              yt=dataset$Y[t]))
+              yt=dataset$Y[t, ]))
+}
+
+dataset.size <- function(dataset) {
+  # Return a LIST with the #samples and the #parameters
+  return(list(nsamples=nrow(dataset$X),
+              p=ncol(dataset$X)))
+}
+
+empty.onlineOutput <- function(dataset)  {
+  size = dataset.size(dataset)  
+  return(list(estimates=matrix(0, nrow=size$p, ncol=size$nsamples)))
+}
+
+add.estimate.onlineOutput <- function(out, t, estimate) {
+  # Adds an estimate in the OnlineOutput object
+  CHECK_TRUE(t <= ncol(out$estimates), msg="t < #total samples")
+  CHECK_EQ(length(estimate), nrow(out$estimates), msg="Correct p=#parameters")
+  out$estimates[, t] <- estimate
+  return(out)
+}
+
+onlineOutput.estimate <- function(out, t) {
+  CHECK_TRUE(t <= ncol(out$estimates), msg="t < #total samples")
+  return(matrix(out$estimates[, t], ncol=1))
 }
 
 CHECK_dataset <- function(dataset) {
@@ -34,6 +65,10 @@ CHECK_dataset <- function(dataset) {
   CHECK_EQ(nrow(dataset$X), nrow(dataset$Y))
   CHECK_numeric(dataset$X)
   CHECK_numeric(dataset$Y)
+}
+
+CHECK_onlineAlgorithm = function(algorihm) {
+  CHECK_SETEQ(names(formals(algorithm)), c("t", "theta.old", "experiment", "online.out"))
 }
 
 CHECK_columnVector <- function(x) {
@@ -53,9 +88,10 @@ CHECK_numeric <- function(x) {
 }
 
 CHECK_experiment <- function(experiment) {
-  CHECK_MEMBER(names(experiment), c("theta.star", "niters", 
+  CHECK_MEMBER(names(experiment), c("name", "theta.star", "niters", 
                                     "sample.dataset",
-                                    "score.function"))
+                                    "score.function",
+                                    "learning.rate"))
   CHECK_columnVector(experiment$theta.star)
   D = experiment$sample.dataset()
   CHECK_dataset(D)
@@ -67,10 +103,13 @@ CHECK_experiment <- function(experiment) {
   # we send a theta with wrong dimension
   CHECK_EXCEPTION(experiment$score.function(bad.theta, point))
   CHECK_columnVector(experiment$score.function(experiment$theta.star, point))
+  
+  CHECK_MEMBER("t", names(formals(experiment$learning.rate)))
 }
 
-CHECK_OnlineOutput <- function(onlineOut) {
-  CHECK_MEMBER(names(onlineOut), c("estimates"))
+CHECK_onlineOutput <- function(onlineOut) {
+  CHECK_MEMBER(names(onlineOut), c("estimates", "last"))
   CHECK_numeric(onlineOut$estimates)
+  CHECK_EQ(onlineOut$estimates[ , ncol(onlineOut$estimates)], onlineOut$last)
 }
 
