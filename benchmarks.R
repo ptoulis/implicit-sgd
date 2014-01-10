@@ -5,11 +5,8 @@ source("online-algorithms.R")
 run.normal.benchmark <- function(niters=10000) {
   e = get.experiment(name="normal", niters=niters)
   d = e$sample.dataset()
-  algos =  list()
-  algos[[1]] <- sgd.onlineAlgorithm
-  algos[[2]] <- asgd.onlineAlgorithm
-  algos[[3]] <-  implicit.onlineAlgorithm
-  cols = c("red", "black", "magenta")
+  algos =  c("sgd", "asgd", "implicit")
+  cols = c("red", "black", "green")
   
   for(i in 1:length(algos)) {
     out = NA

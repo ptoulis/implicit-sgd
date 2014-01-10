@@ -3,7 +3,10 @@ library(mvtnorm)  # recall rmvnorm(n,...) returns n x p matrix.
 base.learning.rate <- function(t, gamma0, alpha, c) {
   CHECK_TRUE(all(c(gamma0, alpha, c) > 0))
   CHECK_INTERVAL(c, 0, 1)
-  exp(log(gamma0) - c * log(1 + alpha * gamma0 * t))
+  x = exp(log(gamma0) - c * log(1 + alpha * gamma0 * t))
+  y = gamma0 * (1 + alpha * gamma0 * t)^-c
+  CHECK_NEAR(x, y, tol=1e-4)
+  return(y)
 }
 
 glm.score.function <- function(h.transfer, theta, datapoint) {
@@ -65,7 +68,7 @@ normal.experiment <- function(niters) {
   
   # 4. Define the learning rate
   experiment$learning.rate <- function(t) {
-    base.learning.rate(t, gamma0=gamma0, alpha=1, c=2/3)
+    base.learning.rate(t, gamma0=gamma0, alpha=0.5, c=1)
   }
   
   # 5. Define the risk . This is usually the negative log-likelihood

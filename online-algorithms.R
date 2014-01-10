@@ -27,9 +27,13 @@ run.onlineAlgorithm <- function(dataset, experiment, algorithm) {
   if(length(grep("asgd", algo.name)) > 0) {
     ## This is ASGD need to rework the estimates
     warning("Transforming the ASGD estimates")
-    X = out$estimates
-    y = t(apply(X, 1, function(s) cumsum(s)))
-    out$estimates = t(t(y) / 1:experiment$niters)
+    estimates = out$estimates
+    avg.estimates = matrix(0, nrow=nrow(estimates), ncol(estimates))
+    for(t in 2:ncol(estimates)) {
+      avg.estimates[,t] = (1-1/t) * avg.estimates[,t-1] + (1/t) * estimates[,t]
+    }
+    # y = t(apply(X, 1, function(s) cumsum(s)))
+    out$estimates = avg.estimates
   }
   out$last = out$estimates[, nsamples]
   return(out)
