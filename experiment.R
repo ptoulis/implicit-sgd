@@ -38,10 +38,11 @@ normal.experiment <- function(niters) {
   # Normal experiment (linear regression)
   # Defined in Xu (2011), Section 6.2, p.8
   #
-  p = 100  # dimension of the parameter vector
+  p = 10  # dimension of the parameter vector
   # 1. Define θ*
   experiment = empty.experiment(niters)
   experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
+  experiment$p = p
   A = diag(seq(0.01, 1, length.out=p))
   # 2. Define the sample dataset function.
   experiment$sample.dataset = function() {
@@ -65,6 +66,17 @@ normal.experiment <- function(niters) {
   # 4. Define the learning rate
   experiment$learning.rate <- function(t) {
     base.learning.rate(t, gamma0=gamma0, alpha=1, c=2/3)
+  }
+  
+  # 5. Define the risk . This is usually the negative log-likelihood
+  experiment$risk <- function(theta) {
+    CHECK_EQ(length(theta), length(experiment$theta.star))
+    truth = experiment$theta.star
+    tmp = 0.5 * t(theta-truth) %*% A %*% (theta-truth)
+    CHECK_EQ(nrow(tmp), 1)
+    CHECK_EQ(ncol(tmp), 1)
+    CHECK_TRUE(all(tmp >= 0))
+    return(as.numeric(tmp))
   }
   
   return(experiment)

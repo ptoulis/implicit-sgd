@@ -23,8 +23,8 @@ source("../r-toolkit/logs.R")
 #   estimates = (p  x niters) matrix of estimate i.e. (theta_t)
 #   last = last vector of estimates
 #
-# An OnlineExperiment is defined by
-#   OnlineAlgorithm + EXPERIMENT
+# A Benchmark is defined by
+#   OnlineAlgorithm(s) + EXPERIMENT
 #   Risk(theta) = function that computes the expected risk for some a vector theta
 #
 # Some functions for datasets/datapoint
@@ -68,7 +68,7 @@ CHECK_dataset <- function(dataset) {
 }
 
 CHECK_onlineAlgorithm = function(algorihm) {
-  CHECK_SETEQ(names(formals(algorithm)), c("t", "theta.old", "experiment", "online.out"))
+  CHECK_SETEQ(names(formals(algorithm)), c("t", "data.history", "experiment", "online.out"))
 }
 
 CHECK_columnVector <- function(x) {
@@ -88,11 +88,13 @@ CHECK_numeric <- function(x) {
 }
 
 CHECK_experiment <- function(experiment) {
-  CHECK_MEMBER(names(experiment), c("name", "theta.star", "niters", 
+  CHECK_MEMBER(names(experiment), c("name", "p", "theta.star", "niters", 
                                     "sample.dataset",
                                     "score.function",
-                                    "learning.rate"))
+                                    "learning.rate",
+                                    "risk"))
   CHECK_columnVector(experiment$theta.star)
+  CHECK_EQ(experiment$p, length(experiment$theta.star))
   D = experiment$sample.dataset()
   CHECK_dataset(D)
   point = get.dataset.point(D, 2)
@@ -105,6 +107,11 @@ CHECK_experiment <- function(experiment) {
   CHECK_columnVector(experiment$score.function(experiment$theta.star, point))
   
   CHECK_MEMBER("t", names(formals(experiment$learning.rate)))
+  CHECK_EQ(experiment$risk(experiment$theta.star), 0, msg="Risk of ground-truth is 0")
+  for(i in 1:100) {
+    theta.random = runif(length(experiment$theta.star), min=-2, max=2)
+    CHECK_TRUE(experiment$risk(theta.random) >= 0, msg="Loss has to be positive.")
+  }
 }
 
 CHECK_onlineOutput <- function(onlineOut) {
@@ -113,3 +120,9 @@ CHECK_onlineOutput <- function(onlineOut) {
   CHECK_EQ(onlineOut$estimates[ , ncol(onlineOut$estimates)], onlineOut$last)
 }
 
+CHECK_benchmark <- function(benchmark) {
+  CHECK_MEMBER(names(benchmark), c("onlineAlgorithms", "experiment"))
+  e = benchmark$experiment
+  CHECK_experiment(e)
+  CHECK_EQ(benchmark$risk(e$theta.star), 0, msg="Risk for benchmark")
+}
