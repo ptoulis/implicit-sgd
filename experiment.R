@@ -1,8 +1,13 @@
 library(mvtnorm)  # recall rmvnorm(n,...) returns n x p matrix.
 
 base.learning.rate <- function(t, gamma0, alpha, c) {
-  CHECK_TRUE(all(c(gamma0, alpha, c) > 0))
-  CHECK_INTERVAL(c, 0, 1)
+  # Computes a learning rate of the form g * (1 + a * t * g)^-c
+  #
+  # Typically a, g have to be set according to the curvature of the loss function (log-likelihood)
+  # c = is usually problem-independent but may get different values according to convexity of loss
+  #
+  CHECK_TRUE(all(c(gamma0, alpha, c) >= 0), msg="Positive params in learning rate.")
+  CHECK_INTERVAL(c, 0, 1, msg="c in [0,1]")
   x = exp(log(gamma0) - c * log(1 + alpha * gamma0 * t))
   y = gamma0 * (1 + alpha * gamma0 * t)^-c
   CHECK_NEAR(x, y, tol=1e-4)
@@ -10,6 +15,14 @@ base.learning.rate <- function(t, gamma0, alpha, c) {
 }
 
 glm.score.function <- function(h.transfer, theta, datapoint) {
+  # Computes  (yt - h(theta' xt) * xt) = score function
+  # for a GLM model with transfer function "h.transfer"
+  # 
+  # Examples:
+  #   normal model : h(x) = x  identity function
+  #   poisson model : h(x) = e^x
+  #   logistic regression : h(x) = logit(x)
+  # 
   xt = datapoint$xt
   yt = datapoint$yt
   CHECK_EQ(length(xt), length(theta))
@@ -21,7 +34,8 @@ glm.score.function <- function(h.transfer, theta, datapoint) {
 empty.experiment <- function(niters) {
   # returns an empty EXPERIMENT object.
   # Useful for initialization and inspection.
-  return(list(theta.star=matrix(0, nrow=1, ncol=1),
+  return(list(name="default",
+              theta.star=matrix(0, nrow=1, ncol=1),
               niters=niters,
               score.function=function(theta, datapoint) {},
               sample.dataset=function() {}))
@@ -37,11 +51,19 @@ get.experiment <- function(name="normal",
   return(e)
 }
 
-normal.experiment <- function(niters) {
+normal.experiment <- function(niters, p=100) {
   # Normal experiment (linear regression)
   # Defined in Xu (2011), Section 6.2, p.8
   #
-  p = 10  # dimension of the parameter vector
+  # Assume xt ~ N(0, A)  where A has eigenvalues from 0.01 to 1
+  #        yt | xt = xt'θ* + ε ,  where ε ~ N(0, 1) ind.
+  #
+  # Thus the score function is equal to
+  #     (yt - xt'θ) * xt  since h(.) transfer = identity
+  #
+  # Args:
+  #   niters = number of samples (also #iterations for online algorithms)
+  #   p = #parameters (dimension of the problem)
   # 1. Define θ*
   experiment = empty.experiment(niters)
   experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
