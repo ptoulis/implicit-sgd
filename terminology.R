@@ -1,6 +1,6 @@
 rm(list=ls())
 source("../r-toolkit/checks.R")
-source("../r-toolkit/logs.R")
+# source("../r-toolkit/logs.R")
 
 # Assume we have a parametric statistical model with a p x 1 parameter "theta"
 #

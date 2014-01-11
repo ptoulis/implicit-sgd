@@ -31,6 +31,7 @@ run.onlineAlgorithm <- function(dataset, experiment, algorithm) {
     warning("Transforming the ASGD estimates")
     estimates = out$estimates
     avg.estimates = matrix(0, nrow=nrow(estimates), ncol(estimates))
+    avg.estimates[,1] = estimates[,1]
     for(t in 2:ncol(estimates)) {
       avg.estimates[,t] = (1-1/t) * avg.estimates[,t-1] + (1/t) * estimates[,t]
     }
