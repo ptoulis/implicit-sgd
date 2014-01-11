@@ -2,7 +2,7 @@
 # across algorithms. Defines evaluation metrics and creates plots.
 source("online-algorithms.R")
 
-run.normal.benchmark <- function(niters=10000) {
+experiment.benchmark <- function(experment.name, niters=10000) {
   e = get.experiment(name="normal", niters=niters)
   d = e$sample.dataset()
   algos =  c("sgd", "asgd", "implicit")
@@ -27,3 +27,41 @@ run.normal.benchmark <- function(niters=10000) {
     }
   }
 }
+
+variance.benchmark <- function(nsamples, nT) {
+  niters = nT
+  p = 4
+  alpha = 1.1
+  nrepeats = nsamples
+  theta.T = matrix(0, nrow=p, ncol=0)
+  
+  e = normal.experiment(niters=niters, p=p)
+  e$learning.rate  = function(t) alpha / t
+  I = diag(p)
+  A = e$A
+  print("A=")
+  print(A)
+  print("S theoretical=")
+  C.theoretical = alpha^2 * solve(2 * alpha * A - I) %*% A
+  print(C.theoretical)
+  print(eigen(C.theoretical)$values)
+  CHECK_TRUE(all(eigen(C.theoretical)$values > 0), msg="Should be >0")
+  for(i in 1:nrepeats) {
+    d = e$sample.dataset()
+    out = run.onlineAlgorithm(d, e, sgd.onlineAlgorithm)
+    theta.T <- cbind(theta.T, out$last)
+    print(out$last)
+    C.empirical = nT * cov(t(theta.T))
+    if(i %% 5==0) {
+      print(sprintf("Out of %d samples : Empirical covariance=", i))
+      print(C.empirical)
+      print("theoretical=")
+      print(C.theoretical)
+      print(mean((C.empirical - C.theoretical)^2))
+    }
+  }
+}
+
+
+
+

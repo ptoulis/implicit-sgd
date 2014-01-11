@@ -68,14 +68,16 @@ normal.experiment <- function(niters, p=100) {
   experiment = empty.experiment(niters)
   experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
   experiment$p = p
-  A = diag(seq(0.01, 1, length.out=p))
+  # A = diag(seq(0.01, 1, length.out=p))
+  A =diag(seq(0.5, 2, length.out=p))
+  experiment$A = A
   # 2. Define the sample dataset function.
   experiment$sample.dataset = function() {
     epsilon = matrix(rnorm(niters), ncol=1)
     X = rmvnorm(niters, mean=rep(0, p), sigma=A)
     Y = X %*% experiment$theta.star + epsilon
     if(niters > 1000) {
-      CHECK_MU0(as.vector(Y), 0)
+      # CHECK_MU0(as.vector(Y), 0)
     }
     CHECK_TRUE(nrow(X) == niters)
     return(list(X=X, Y=Y))

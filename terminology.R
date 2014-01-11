@@ -56,8 +56,8 @@ add.estimate.onlineOutput <- function(out, t, estimate) {
 
 onlineOutput.estimate <- function(out, t) {
   if(t==0) {
-    warning("Default is to return 0-vector, for t=0")
-    return(matrix(0, nrow=nrow(out$estimates), ncol=1))
+    warning("Default is to return 1-vector, for t=0")
+    return(matrix(1, nrow=nrow(out$estimates), ncol=1))
   }
   CHECK_TRUE(t <= ncol(out$estimates), msg="t < #total samples")
   return(matrix(out$estimates[, t], ncol=1))
@@ -92,11 +92,12 @@ CHECK_numeric <- function(x) {
 }
 
 CHECK_experiment <- function(experiment) {
-  CHECK_MEMBER(names(experiment), c("name", "p", "theta.star", "niters", 
+  CHECK_MEMBER( c("name", "p", "theta.star", "niters", 
                                     "sample.dataset",
                                     "score.function",
                                     "learning.rate",
-                                    "risk"))
+                                    "risk"),
+                names(experiment))
   CHECK_columnVector(experiment$theta.star)
   CHECK_EQ(experiment$p, length(experiment$theta.star))
   D = experiment$sample.dataset()
