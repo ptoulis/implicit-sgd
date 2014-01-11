@@ -12,9 +12,11 @@ run.onlineAlgorithm <- function(dataset, experiment, algorithm) {
   algo.name = as.character(substitute(algorithm))
   cat(sprintf("Running algorithm %s, Experiment=%s, samples=%d \n",
               algo.name, experiment$name, experiment$niters))
-  for(t in 2:nsamples) {
+  for(t in 1:nsamples) {
     ## Run all iterations here.
-    history = list(X=dataset$X[1:t, ],
+    # History has data from 1 to t
+    # Recall that theta_t = estimate of theta AFTER seeing datapoint t.
+    history = list(X=matrix(dataset$X[1:t, ], ncol=experiment$p),
                    Y=matrix(dataset$Y[1:t, ], ncol=1))
     # 1. Runs the online-algorithm step.
     theta.new = algorithm(t, online.out=out,

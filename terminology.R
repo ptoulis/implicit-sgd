@@ -55,6 +55,10 @@ add.estimate.onlineOutput <- function(out, t, estimate) {
 }
 
 onlineOutput.estimate <- function(out, t) {
+  if(t==0) {
+    warning("Default is to return 0-vector, for t=0")
+    return(matrix(0, nrow=nrow(out$estimates), ncol=1))
+  }
   CHECK_TRUE(t <= ncol(out$estimates), msg="t < #total samples")
   return(matrix(out$estimates[, t], ncol=1))
 }
