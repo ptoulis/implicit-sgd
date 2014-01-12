@@ -69,8 +69,9 @@ normal.experiment <- function(niters, p=100) {
   experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
   experiment$p = p
   # A = diag(seq(0.01, 1, length.out=p))
-  A =diag(seq(0.5, 2, length.out=p))
-  experiment$A = A
+  A = diag(seq(0.1, 2, length.out=p))
+  # Set the covariance matrix of the experiment
+  experiment$Vx = A
   # 2. Define the sample dataset function.
   experiment$sample.dataset = function() {
     epsilon = matrix(rnorm(niters), ncol=1)

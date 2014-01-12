@@ -92,12 +92,12 @@ CHECK_numeric <- function(x) {
 }
 
 CHECK_experiment <- function(experiment) {
-  CHECK_MEMBER( c("name", "p", "theta.star", "niters", 
-                                    "sample.dataset",
-                                    "score.function",
-                                    "learning.rate",
-                                    "risk"),
-                names(experiment))
+  CHECK_MEMBER(names(experiment),
+               c("name", "p", "theta.star", "niters", 
+                 "sample.dataset", "Vx",
+                 "score.function",
+                 "learning.rate",
+                 "risk"), msg="Correct fields for the experiment")
   CHECK_columnVector(experiment$theta.star)
   CHECK_EQ(experiment$p, length(experiment$theta.star))
   D = experiment$sample.dataset()
@@ -117,6 +117,8 @@ CHECK_experiment <- function(experiment) {
     theta.random = runif(length(experiment$theta.star), min=-2, max=2)
     CHECK_TRUE(experiment$risk(theta.random) >= 0, msg="Loss has to be positive.")
   }
+  # check that the covariance matrix is positive definite
+  CHECK_TRUE(all(eigen(experiment$Vx)$values > 0), msg="Cov matrix is nonneg def")
 }
 
 CHECK_onlineOutput <- function(onlineOut) {

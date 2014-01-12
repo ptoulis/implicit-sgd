@@ -6,8 +6,10 @@ run.onlineAlgorithm <- function(dataset, experiment, algorithm) {
   # Implements the vanilla SGD algorithm.
   CHECK_dataset(dataset)
   CHECK_experiment(experiment)
+  # Will return the "out" object (of type OnlineOutput)
   out = empty.onlineOutput(dataset)
   nsamples = dataset.size(dataset)$nsamples
+  CHECK_EQ(nsamples, experiment$niters)  # iterations = samples
   pb = txtProgressBar(style=3)
   algo.name = as.character(substitute(algorithm))
   cat(sprintf("Running algorithm %s, Experiment=%s, samples=%d \n",
@@ -25,20 +27,20 @@ run.onlineAlgorithm <- function(dataset, experiment, algorithm) {
     out <- add.estimate.onlineOutput(out, t, estimate=theta.new)
     setTxtProgressBar(pb, value=t/nsamples)
   }
-
+  # If ASGD we need to average all the estimates.
   if(length(grep("asgd", algo.name)) > 0) {
     ## This is ASGD need to rework the estimates
-    warning("Transforming the ASGD estimates")
+    warning("Transforming the ASGD estimates...")
     estimates = out$estimates
     avg.estimates = matrix(0, nrow=nrow(estimates), ncol(estimates))
     avg.estimates[,1] = estimates[,1]
     for(t in 2:ncol(estimates)) {
       avg.estimates[,t] = (1-1/t) * avg.estimates[,t-1] + (1/t) * estimates[,t]
     }
-    # y = t(apply(X, 1, function(s) cumsum(s)))
     out$estimates = avg.estimates
   }
   out$last = out$estimates[, nsamples]
+  CHECK_onlineOutput(out)
   return(out)
 }
 
@@ -55,7 +57,9 @@ sgd.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
 
 asgd.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
   # Implements the ASGD algorithm (Polyak 1992)
-  #
+  # This will perform the SGD updates but...
+  # We add an expection in run.onlineAlgorithm so that
+  # the ASGD will average over the SGD estimates.
   return(sgd.onlineAlgorithm(t, online.out, data.history, experiment))
 }
 
@@ -64,6 +68,7 @@ batch.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
   theta.new = tail(as.numeric(fit$coefficients), experiment$p)
   return(theta.new)
 }
+
 oracle.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
   return(experiment$theta.star)
 }
@@ -76,8 +81,9 @@ implicit.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
   theta.old = onlineOutput.estimate(online.out, t-1)
   get.score.coeff <- function(theta) {
     # this returns the value  yt - h(theta' xt)  -- for a GLM
+    # this is a scalar.
     norm.score = experiment$score.function(theta, datapoint) / xt
-    CHECK_TRUE(all(abs(norm.score - norm.score[1]) < 1e-5))  # all are the same
+    CHECK_TRUE(all(abs(norm.score - norm.score[1]) < 1e-5))  # all are the same (score=xt * coeff)
     return(norm.score[1])  
   }
   # 1. Define the search interval

@@ -1,8 +1,12 @@
+# Copyright (c) 2013
+# Panos Toulis, ptoulis@fas.harvard.edu
+#
 # Benchmarks. Contains code to make benchmark comparisons
 # across algorithms. Defines evaluation metrics and creates plots.
+#
 source("online-algorithms.R")
 
-experiment.benchmark <- function(experment.name, niters=10000) {
+experiment.benchmark <- function(experiment.name, niters=10000) {
   e = get.experiment(name="normal", niters=niters)
   d = e$sample.dataset()
   algos =  c("sgd", "asgd", "implicit")
