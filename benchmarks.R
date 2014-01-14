@@ -35,25 +35,28 @@ experiment.benchmark <- function(experiment.name, niters=10000) {
 variance.benchmark <- function(nsamples, nT) {
   niters = nT
   p = 4
-  alpha = 1.1
+  
   nrepeats = nsamples
   theta.T = matrix(0, nrow=p, ncol=0)
   
   e = normal.experiment(niters=niters, p=p)
-  e$learning.rate  = function(t) alpha / t
+  alpha = e$learning.rate(100000) * 100000
+  print(sprintf("Alpha=%.2f", alpha))
   I = diag(p)
-  A = e$A
+  A = e$Vx
   print("A=")
   print(A)
+
   print("S theoretical=")
   C.theoretical = alpha^2 * solve(2 * alpha * A - I) %*% A
   print(C.theoretical)
   print(eigen(C.theoretical)$values)
-  CHECK_TRUE(all(eigen(C.theoretical)$values > 0), msg="Should be >0")
+  CHECK_TRUE(all(eigen(C.theoretical)$values > 0), msg="Should be > 0")
   for(i in 1:nrepeats) {
     d = e$sample.dataset()
     out = run.onlineAlgorithm(d, e, sgd.onlineAlgorithm)
     theta.T <- cbind(theta.T, out$last)
+    print("Last estimate=")
     print(out$last)
     C.empirical = nT * cov(t(theta.T))
     if(i %% 5==0) {
