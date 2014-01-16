@@ -68,9 +68,9 @@ normal.experiment <- function(niters, p=100) {
   experiment = empty.experiment(niters)
   experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
   experiment$p = p
-  # A = diag(seq(0.01, 1, length.out=p))
-  A = matrix(runif(p^2, min=-1, max=1), nrow=p)
-  A = A %*% t(A)
+  A = diag(seq(0.25, 2, length.out=p))
+  # A = matrix(runif(p^2, min=0, max=1), nrow=p)
+  # A = A %*% t(A)
   # Set the covariance matrix of the experiment
   experiment$Vx = A
   # 2. Define the sample dataset function.
@@ -94,19 +94,26 @@ normal.experiment <- function(niters, p=100) {
   
   # 4. Define the learning rate
   experiment$learning.rate <- function(t) {
-    base.learning.rate(t, gamma0=gamma0, alpha=0.5, c=1)
+    stop("Need to define learning rate per-application.")
+    # base.learning.rate(t, gamma0=gamma0, alpha=0.05, c=1)
   }
   
   # 5. Define the risk . This is usually the negative log-likelihood
+  truth = experiment$theta.star
   experiment$risk <- function(theta) {
-    CHECK_EQ(length(theta), length(experiment$theta.star))
-    truth = experiment$theta.star
-    tmp = 0.5 * t(theta-truth) %*% A %*% (theta-truth)
+    CHECK_EQ(length(theta), length(truth))
+    tmp = 0.5 * t(theta - truth) %*% A %*% (theta - truth)
     CHECK_EQ(nrow(tmp), 1)
     CHECK_EQ(ncol(tmp), 1)
     CHECK_TRUE(all(tmp >= 0))
     return(as.numeric(tmp))
   }
+  ## IGNORE
+#   batch.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
+#     fit = lm(Y ~ X, data=data.history)
+#     theta.new = tail(as.numeric(fit$coefficients), experiment$p)
+#     return(theta.new)
+#   }
   
   return(experiment)
 }
