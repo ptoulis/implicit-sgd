@@ -16,9 +16,13 @@ source("../r-toolkit/checks.R")
 #
 # An OnlineAlgorithm is defined by a function that accepts 
 #   t = no. of iteration
-#   theta.old = vector of current estimate
-#   datapoint  = DATAPOINT object at t (xt vector, yt value)
+#   onlineOutput = current OnlineOutput object.
+#   data.history  = DATASET object from 1:t
 #   experiment = EXPERIMENT object, has learning rate/score function
+# The idea is that the algorithm will use the data up to t, and the current estimates
+# to create a new estimate. Usually, it will only need xt, yt, θt, 
+# i.e. only the data + estimate at the previous time point.
+#
 # The object returns an OnlineOutput object:
 #   estimates = (p  x niters) matrix of estimate i.e. (theta_t)
 #   last = last vector of estimates
@@ -56,12 +60,22 @@ add.estimate.onlineOutput <- function(out, t, estimate) {
 
 onlineOutput.estimate <- function(out, t) {
   if(t==0) {
-    warning("Default is to return 1-vector, for t=0")
-    return(matrix(1, nrow=nrow(out$estimates), ncol=1))
+    # warning("Default is to return 0-vector, for t=0")
+    return(matrix(0, nrow=nrow(out$estimates), ncol=1))
   }
   CHECK_TRUE(t <= ncol(out$estimates), msg="t < #total samples")
   return(matrix(out$estimates[, t], ncol=1))
 }
+
+onlineOutput.risk <- function(out, experiment) {
+  apply(out$estimates, 2, experiment$risk)
+}
+
+eucl.norm <- function(x1, x2) sum((x1-x2)^2)
+onlineOutput.bias <- function(out, experiment) {
+  apply(out$estimates, 2, function(x) eucl.norm(x, experiment$theta.star))
+}
+
 
 CHECK_dataset <- function(dataset) {
   CHECK_SETEQ(names(dataset), c("X", "Y"))
