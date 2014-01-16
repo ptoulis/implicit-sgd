@@ -7,6 +7,9 @@ run.online.algorithm.many <- function(experiment,
                                       nsamples) {
   # Will generate many estimates for the algorithm
   #
+  # The result will be a LIST of the form
+  #   out[[algoName]][[#sample]]
+  # e.g. out[[sgd.onlineAlgorithm]][[5]] = 5th-sample (OnlineOutput object)
   algo.fn = onlineAlgorithm.wrapper(algorithm.names)
   # initialize
   out.all = list()
