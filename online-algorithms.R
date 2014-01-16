@@ -2,18 +2,50 @@
 source("terminology.R")
 source("experiment.R")
 
-run.onlineAlgorithm <- function(dataset, experiment, algorithm) {
-  # Implements the vanilla SGD algorithm.
+run.online.algorithm.many <- function(experiment,
+                                      algorithm.names=kImplementedOnlineAlgorithms, 
+                                      nsamples) {
+  # Will generate many estimates for the algorithm
+  #
+  algo.fn = onlineAlgorithm.wrapper(algorithm.names)
+  # initialize
+  out.all = list()
+  for(algoName in names(out.all)) {
+    out.all[[algoName]] <- list()
+  }
+  pb <- txtProgressBar(style=3)
+  for(i in 1:nsamples) {
+    dataset = experiment$sample.dataset()
+    for(algoName in names(algo.fn)) {
+      out.tmp = run.online.algorithm(dataset, experiment, algo.fn[[algoName]])  
+      out.all[[algoName]][[i]] <- out.tmp
+    }
+    setTxtProgressBar(pb, value=i/nsamples)
+  }
+  return(out.all)
+}
+
+# Convention is that every online algorithm should be named:
+#
+# X.onlineAlgorithm, where X = name of the algorithm
+run.online.algorithm <- function(dataset, experiment, algorithm, verbose=F) {
+  # Runs the specific online learning algorithm
+  # See terminology for the definition of OnlineAlgorithm
+  #
   CHECK_dataset(dataset)
   CHECK_experiment(experiment)
   # Will return the "out" object (of type OnlineOutput)
   out = empty.onlineOutput(dataset)
   nsamples = dataset.size(dataset)$nsamples
   CHECK_EQ(nsamples, experiment$niters)  # iterations = samples
-  pb = txtProgressBar(style=3)
+  pb = NA
   algo.name = as.character(substitute(algorithm))
-  cat(sprintf("Running algorithm %s, Experiment=%s, samples=%d \n",
-              algo.name, experiment$name, experiment$niters))
+  if(verbose) {
+    cat(sprintf("Running algorithm %s, Experiment=%s, samples=%d \n",
+                algo.name, experiment$name, experiment$niters))
+    pb <- txtProgressBar(style=3)
+  }
+  
   for(t in 1:nsamples) {
     ## Run all iterations here.
     # History has data from 1 to t
@@ -25,19 +57,13 @@ run.onlineAlgorithm <- function(dataset, experiment, algorithm) {
                           data.history=history,
                           experiment=experiment)
     out <- add.estimate.onlineOutput(out, t, estimate=theta.new)
-    setTxtProgressBar(pb, value=t/nsamples)
+    if(verbose)
+      setTxtProgressBar(pb, value=t/nsamples)
   }
+  
   # If ASGD we need to average all the estimates.
   if(length(grep("asgd", algo.name)) > 0) {
-    ## This is ASGD need to rework the estimates
-    warning("Transforming the ASGD estimates...")
-    estimates = out$estimates
-    avg.estimates = matrix(0, nrow=nrow(estimates), ncol(estimates))
-    avg.estimates[,1] = estimates[,1]
-    for(t in 2:ncol(estimates)) {
-      avg.estimates[,t] = (1-1/t) * avg.estimates[,t-1] + (1/t) * estimates[,t]
-    }
-    out$estimates = avg.estimates
+    out <- asgd.transformOnlineOutput(out)
   }
   out$last = out$estimates[, nsamples]
   CHECK_onlineOutput(out)
@@ -63,10 +89,17 @@ asgd.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
   return(sgd.onlineAlgorithm(t, online.out, data.history, experiment))
 }
 
-batch.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
-  fit = lm(Y ~ X, data=data.history)
-  theta.new = tail(as.numeric(fit$coefficients), experiment$p)
-  return(theta.new)
+asgd.transform.output <- function(sgd.onlineOutput) {
+  ## This is ASGD need to rework the estimates
+  out = sgd.onlineOutput
+  estimates = out$estimates
+  avg.estimates = matrix(0, nrow=nrow(estimates), ncol(estimates))
+  avg.estimates[,1] = estimates[,1]
+  for(t in 2:ncol(estimates)) {
+    avg.estimates[,t] = (1-1/t) * avg.estimates[,t-1] + (1/t) * estimates[,t]
+  }
+  out$estimates = avg.estimates
+  return(out)
 }
 
 oracle.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
@@ -100,4 +133,20 @@ implicit.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
   xit = uniroot(implicit.fn, interval=Bt)$root
   theta.new = theta.old + xit * xt
   return(theta.new)
+}
+
+
+kImplementedOnlineAlgorithms <<- ls()[grep("\\.onlineAlgorithm", ls())]
+onlineAlgorithm.wrapper <- function(algo.names) {
+  fn.list = list("sgd.onlineAlgorithm"=sgd.onlineAlgorithm,
+                 "implicit.onlineAlgorithm"=implicit.onlineAlgorithm,
+                 "asgd.onlineAlgorithm"=asgd.onlineAlgorithm,
+                 "oracle.onlineAlgorithm"=oracle.onlineAlgorithm)
+  CHECK_MEMBER(algo.names, kImplementedOnlineAlgorithms)
+  CHECK_EQ(length(kImplementedOnlineAlgorithms), length(names(fn.list)))
+  ret.list = list()
+  for(algoName in algo.names) {
+    ret.list[[algoName]] = fn.list[[algoName]]
+  }
+  return(ret.list)
 }
