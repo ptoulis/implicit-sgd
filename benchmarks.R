@@ -6,29 +6,48 @@
 #
 source("online-algorithms.R")
 
-experiment.benchmark <- function(experiment.name, niters=10000) {
-  e = get.experiment(name="normal", niters=niters)
-  d = e$sample.dataset()
-  algos =  c("sgd", "asgd", "implicit")
-  cols = c("red", "black", "green")
+bias.benchmark <- function() {
+  algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
+  e = normal.experiment(niters=5000, p=5)
+  nsamples = 20
+  # of the form LIST[[algorithm]][[no.sample]]
+  # e.g. LIST[[sgd.onlineAlgorithm]][[3]] is the OnlineOutput object
+  # of the 3rd run
+  out.algo.list = run.online.algorithm.many(e, algos, nsamples=nsamples)
+  bias=list()
+  # Update the bias data.
+  for(algoName in algos) {
+    bias[[algoName]] = list(min=rep(0, e$niters), max=rep(0, e$niters))
+    out.list = out.algo.list[[algoName]]
+    get.bias.samples <- function() {
+      bias.matrix = matrix(0, nrow=nsamples, ncol=e$niters)
+      for(i in 1:nsamples) {
+        out = out.list[[i]]
+        bias.matrix[i,] <- onlineOutput.bias(out, experiment=e)
+      }
+      return(bias.matrix)
+    }
+    
+    B = get.bias.samples()
+    bias[[algoName]]$min = apply(B, 2, function(x) quantile(x, probs=c(0.1)))
+    bias[[algoName]]$max = apply(B, 2, function(x) quantile(x, probs=c(0.9)))
+  }
   
+  cols = topo.colors(length(algos))
+  ## Plotting.
   for(i in 1:length(algos)) {
-    out = NA
+    algoName = algos[i]
+    x = 1:e$niters
+    ymax = log(bias[[algoName]]$max)
+    ymin = log(bias[[algoName]]$min)
+    m = min(ymin)
+    M = max(ymax)
     if(i==1) {
-      out = run.onlineAlgorithm(dataset=d, experiment=e, algorithm=sgd.onlineAlgorithm)
-    } else if(i==2) {
-      out = run.onlineAlgorithm(dataset=d, experiment=e, algorithm=asgd.onlineAlgorithm)
-    } else {
-      out = run.onlineAlgorithm(dataset=d, experiment=e, algorithm=implicit.onlineAlgorithm)
+      plot(x, ymax, main="Bias", xlab="iterations", type="l", col="white",
+           ylim=c(m,M))
+      legend(0.5 * e$niters, max(ymax), col=cols, legend=algos, lty=c(1, 2))
     }
-    x = log(1:ncol(out$estimates), base=10)
-    y = log(apply(out$estimates, 2, e$risk), base=10)
-    if(i==1) {
-      plot(x, y, type="l", col=cols[i])
-      legend(0.5, -1, legend=c("sgd", "asgd", "implicit"), col=cols, lty=rep(1, 3))
-    } else {
-      lines(x, y, col=cols[i])
-    }
+    polygon(c(x, rev(x)), c(ymin, rev(ymax)), col=cols[i], lty=i)
   }
 }
 
