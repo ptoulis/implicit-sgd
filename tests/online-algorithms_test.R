@@ -22,7 +22,7 @@ test.sgd <- function() {
     }})
   d$Y = matrix(y, ncol=1)
   
-  out = run.onlineAlgorithm(d, e, algorithm=sgd.onlineAlgorithm)
+  out = run.online.algorithm(d, e, algorithm=sgd.onlineAlgorithm)
   CHECK_TRUE(all(out$estimates == xsums))
 }
 
@@ -46,8 +46,8 @@ test.asgd <- function() {
       return(2)
     }})
   d$Y = matrix(y, ncol=1)
-  out = run.onlineAlgorithm(d, e, algorithm=asgd.onlineAlgorithm)
-  out.sgd = run.onlineAlgorithm(d, e, algorithm=sgd.onlineAlgorithm)
+  out = run.online.algorithm(d, e, algorithm=asgd.onlineAlgorithm)
+  out.sgd = run.online.algorithm(d, e, algorithm=sgd.onlineAlgorithm)
   rand.t = sample(1:n, 1)
   theta.t = onlineOutput.estimate(out, rand.t)
   should.be = rowMeans(out.sgd$estimates[, 1:rand.t])
@@ -70,7 +70,7 @@ test.implicit <- function() {
   y = rep(1/alpha, n)
   d$Y = matrix(y, ncol=1)
   
-  out = run.onlineAlgorithm(d, e, algorithm=implicit.onlineAlgorithm)
+  out = run.online.algorithm(d, e, algorithm=implicit.onlineAlgorithm)
   
   U = matrix(1, nrow=p, ncol=p)
   B = (diag(p) - (alpha / (1+alpha * p)) * U)  # inverse of I + aU
@@ -101,5 +101,21 @@ test.implicit <- function() {
   CHECK_TRUE(all(abs(theta.t - should.be) < 1e-2))
 }
 
-
+test.onlineAlgorithm.wrapper <- function() {
+  algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
+  algo.fn = onlineAlgorithm.wrapper(algo.names=algos)
+  e = normal.experiment(niters=100, p=5)
+  d = e$sample.dataset()
+  out1 = run.online.algorithm(d, e, algo.fn$sgd.onlineAlgorithm)
+  out2 = run.online.algorithm(d, e, sgd.onlineAlgorithm)
+  
+  out3 = run.online.algorithm(d, e, algo.fn$implicit.onlineAlgorithm)
+  out4 = run.online.algorithm(d, e, implicit.onlineAlgorithm)
+  
+  # Make sure that the functions from the onlineAlgo.wrapper()
+  # are what they are supposed to be.
+  CHECK_NEAR(out1$last, out2$last)
+  CHECK_NEAR(out3$last, out4$last)
+  CHECK_EXCEPTION(CHECK_NEAR(out1$last, out3$last))
+}
 
