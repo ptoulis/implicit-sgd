@@ -94,8 +94,8 @@ normal.experiment <- function(niters, p=100) {
   
   # 4. Define the learning rate
   experiment$learning.rate <- function(t) {
-    stop("Need to define learning rate per-application.")
-    # base.learning.rate(t, gamma0=gamma0, alpha=0.05, c=1)
+    # stop("Need to define learning rate per-application.")
+    base.learning.rate(t, gamma0=gamma0, alpha=0.05, c=1)
   }
   
   # 5. Define the risk . This is usually the negative log-likelihood
