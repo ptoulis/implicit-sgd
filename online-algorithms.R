@@ -13,18 +13,25 @@ run.online.algorithm.many <- function(experiment,
   algo.fn = onlineAlgorithm.wrapper(algorithm.names)
   # initialize
   out.all = list()
-  for(algoName in names(out.all)) {
+  for(algoName in algorithm.names) {
     out.all[[algoName]] <- list()
+    for(t in 1:experiment$niters) {
+      out.all[[algoName]][[t]] = matrix(0, nrow=experiment$p, ncol=nsamples)
+    }
   }
   pb <- txtProgressBar(style=3)
   for(i in 1:nsamples) {
     dataset = experiment$sample.dataset()
     for(algoName in names(algo.fn)) {
-      out.tmp = run.online.algorithm(dataset, experiment, algo.fn[[algoName]])  
-      out.all[[algoName]][[i]] <- out.tmp
+      out.tmp = run.online.algorithm(dataset, experiment, algo.fn[[algoName]])
+      CHECK_EQ(ncol(out.tmp$estimates), experiment$niters, msg="Correct #iters")
+      for(t in 1:experiment$niters) {
+        out.all[[algoName]][[t]][, i] <- out.tmp$estimates[, t]
+      }
     }
     setTxtProgressBar(pb, value=i/nsamples)
   }
+  CHECK_multipleOnlineOutput(out.all, experiment=experiment)
   return(out.all)
 }
 
@@ -141,6 +148,10 @@ implicit.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
 
 kImplementedOnlineAlgorithms <<- ls()[grep("\\.onlineAlgorithm", ls())]
 onlineAlgorithm.wrapper <- function(algo.names) {
+  # Given algorithm names it will return the functions
+  # that implement them.
+  # Can be used then in run.online.algorithm
+  #
   fn.list = list("sgd.onlineAlgorithm"=sgd.onlineAlgorithm,
                  "implicit.onlineAlgorithm"=implicit.onlineAlgorithm,
                  "asgd.onlineAlgorithm"=asgd.onlineAlgorithm,
