@@ -78,8 +78,6 @@ onlineOutput.risk <- function(out, experiment) {
   apply(out$estimates, 2, experiment$risk)
 }
 
-eucl.norm <- function(x1, x2) sum((x1-x2)^2)
-
 CHECK_multipleOnlineOutput <- function(mu.out, experiment) {
   if(experiment$niters == 0) return;
   # get the first algo
