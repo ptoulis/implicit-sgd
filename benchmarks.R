@@ -5,32 +5,26 @@
 # across algorithms. Defines evaluation metrics and creates plots.
 #
 source("online-algorithms.R")
+library(scales)
 
 bias.benchmark <- function() {
   algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
-  e = normal.experiment(niters=5000, p=5)
-  nsamples = 20
+  e = normal.experiment(niters=400, p=5)
+  e$learning.rate <- function(t) 0.1 / t
+  nsamples = 10
   # of the form LIST[[algorithm]][[no.sample]]
   # e.g. LIST[[sgd.onlineAlgorithm]][[3]] is the OnlineOutput object
   # of the 3rd run
-  out.algo.list = run.online.algorithm.many(e, algos, nsamples=nsamples)
+  mul.out = run.online.algorithm.many(e, algos, nsamples=nsamples)
   bias=list()
-  # Update the bias data.
   for(algoName in algos) {
-    bias[[algoName]] = list(min=rep(0, e$niters), max=rep(0, e$niters))
-    out.list = out.algo.list[[algoName]]
-    get.bias.samples <- function() {
-      bias.matrix = matrix(0, nrow=nsamples, ncol=e$niters)
-      for(i in 1:nsamples) {
-        out = out.list[[i]]
-        bias.matrix[i,] <- onlineOutput.bias(out, experiment=e)
-      }
-      return(bias.matrix)
-    }
-    
-    B = get.bias.samples()
-    bias[[algoName]]$min = apply(B, 2, function(x) quantile(x, probs=c(0.1)))
-    bias[[algoName]]$max = apply(B, 2, function(x) quantile(x, probs=c(0.9)))
+    theta.t.fn <- function(theta) eucl.norm(theta, e$theta.star)
+    summary.min = function(x) quantile(x, 0.05)
+    summary.max = function(x) quantile(x, 0.95)
+    bias[[algoName]]$min = multiple.onlineOutput.apply(e, mul.out, algoName,
+                                                       theta.t.fn, summary.min)
+    bias[[algoName]]$max = multiple.onlineOutput.apply(e, mul.out, algoName,
+                                                       theta.t.fn, summary.max)
   }
   
   cols = topo.colors(length(algos))
@@ -47,7 +41,7 @@ bias.benchmark <- function() {
            ylim=c(m,M))
       legend(0.5 * e$niters, max(ymax), col=cols, legend=algos, lty=c(1, 2))
     }
-    polygon(c(x, rev(x)), c(ymin, rev(ymax)), col=cols[i], lty=i)
+    polygon(c(x, rev(x)), c(ymin, rev(ymax)), col=alpha(cols[i], 0.6), lty=i, )
   }
 }
 
