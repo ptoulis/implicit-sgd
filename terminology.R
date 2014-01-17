@@ -13,25 +13,32 @@ source("../r-toolkit/checks.R")
 #   sample.dataset() = samples DATASET object
 #   score.function = \nabla loglik(theta, data_t) = score function
 #   learning.rate = function (t, ...) = gives the learning rate > 0
+#   Vx = covariance matrix of xt (covariates/features)
 #
 # An OnlineAlgorithm is defined by a function that accepts 
 #   t = no. of iteration
 #   onlineOutput = current OnlineOutput object.
 #   data.history  = DATASET object from 1:t
 #   experiment = EXPERIMENT object, has learning rate/score function
+#
 # The idea is that the algorithm will use the data up to t, and the current estimates
 # to create a new estimate. Usually, it will only need xt, yt, θt, 
 # i.e. only the data + estimate at the previous time point.
 #
-# The object returns an OnlineOutput object:
+# The online algorithm returns an OnlineOutput object:
 #   estimates = (p  x niters) matrix of estimate i.e. (theta_t)
 #   last = last vector of estimates
 #
-# A Benchmark is defined by
-#   OnlineAlgorithm(s) + EXPERIMENT
-#   Risk(theta) = function that computes the expected risk for some a vector theta
+# Assume that we run the online algorithm for a specific experiment, k times.
+# A MultipleOnlineOutput object is the result of run.online.algorithm.many()
+# and it is *not* a LIST of OnlineOutput objects. Rather it is a list
+# with the following dimensions:
 #
-# Some functions for datasets/datapoint
+#   {algorithmName}{iteration} = matrix(p x nsamples)
+# This holds the output like
+#   out[[sgd.onlineAlgorithm]][[t]] = matrix(p x nsamples)
+# has all the samples of θt    (nsamples)
+# 
 
 get.dataset.point <- function(dataset, t) {
   CHECK_TRUE(nrow(dataset$X) >= t && nrow(dataset$Y) >= t)
@@ -72,8 +79,55 @@ onlineOutput.risk <- function(out, experiment) {
 }
 
 eucl.norm <- function(x1, x2) sum((x1-x2)^2)
-onlineOutput.bias <- function(out, experiment) {
-  apply(out$estimates, 2, function(x) eucl.norm(x, experiment$theta.star))
+
+CHECK_multipleOnlineOutput <- function(mu.out, experiment) {
+  if(experiment$niters == 0) return;
+  # get the first algo
+  mu.out = mu.out[[names(mu.out)[1]]]
+  CHECK_EQ(length(mu.out), experiment$niters)
+  random.i = sample(1:experiment$niters, 1)
+  CHECK_EQ(nrow(mu.out[[random.i]]), experiment$p)
+}
+
+mul.OnlineOutput.vapply <- function(experiment,
+                                   mul.out,
+                                   algo,
+                                   theta.t.fn,
+                                   summary.fn) {
+  # Applies a function to a MultipleOnlineOutput object.
+  #
+  # Returns a vector V = (niters x 1) vector of values where
+  #  V(t) = summary(fn(theta_t1), fn(thetat2), ...)
+  #
+  # theta_tj = j-th sample of theta_t
+  # summary = summary function, e.g. specific quantile, max etc.
+  #
+  CHECK_MEMBER(algo, names(mul.out))
+  out = mul.out[[algo]]
+  maxT = length(out)
+  CHECK_EQ(experiment$niters, maxT)
+  CHECK_EQ(experiment$p, nrow(out[[1]]))
+  sapply(1:maxT, function(t) summary.fn(apply(out[[t]], 2, theta.t.fn)))
+}
+
+mul.OnlineOutput.mapply <- function(experiment,
+                                   mul.out,
+                                   algo,
+                                   fn) {
+  # Applies a function to a MultipleOnlineOutput object.
+  #
+  # Returns a vector V = (niters x 1) vector of values where
+  #  V(t) = summary(fn(theta_t1), fn(thetat2), ...)
+  #
+  # theta_tj = j-th sample of theta_t
+  # summary = summary function, e.g. specific quantile, max etc.
+  #
+  CHECK_MEMBER(algo, names(mul.out))
+  out = mul.out[[algo]]
+  maxT = length(out)
+  CHECK_EQ(experiment$niters, maxT)
+  CHECK_EQ(experiment$p, nrow(out[[1]]))
+  sapply(1:maxT, function(t) fn(out[[t]]))
 }
 
 
