@@ -1,6 +1,9 @@
+# Copyright (c) 2013
+# Panos Toulis, ptoulis@fas.harvard.edu
+#
 rm(list=ls())
 source("../r-toolkit/checks.R")
-# source("../r-toolkit/logs.R")
+source("../r-toolkit/logs.R")
 
 # Assume we have a parametric statistical model with a p x 1 parameter "theta"
 #
@@ -9,6 +12,7 @@ source("../r-toolkit/checks.R")
 #
 # Create an EXPERIMENT (stochastic approximation). This is comprised by 
 #   "theta.star" = # (px1) vector of real values, 
+#    p = length(theta.star) = #parameters. That is a terrible name..
 #   niters = (#iterations), 
 #   sample.dataset() = samples DATASET object
 #   score.function = \nabla loglik(theta, data_t) = score function
@@ -78,6 +82,7 @@ onlineOutput.risk <- function(out, experiment) {
   apply(out$estimates, 2, experiment$risk)
 }
 
+# Functions for the MultipleOnlineOutput object.
 CHECK_multipleOnlineOutput <- function(mu.out, experiment) {
   if(experiment$niters == 0) return;
   # get the first algo
@@ -109,25 +114,29 @@ mul.OnlineOutput.vapply <- function(experiment,
 }
 
 mul.OnlineOutput.mapply <- function(experiment,
-                                   mul.out,
-                                   algo,
-                                   fn) {
+                                    mul.out,
+                                    algo,
+                                    fn) {
   # Applies a function to a MultipleOnlineOutput object.
+  # 
+  # Args:
+  #   experiment = the EXPERIMENT object (see terminology)
+  #   mul.out = MultipleOnlineOutput object.
+  #   algo = name of the algorithm (character)
+  #   fn = function (p x n) -> R
   #
   # Returns a vector V = (niters x 1) vector of values where
-  #  V(t) = summary(fn(theta_t1), fn(thetat2), ...)
-  #
-  # theta_tj = j-th sample of theta_t
-  # summary = summary function, e.g. specific quantile, max etc.
-  #
+  #   V = (fn(out_1), fn(out_2), ...)
+  #   V(t)  = fn(out_t) Here fn() accepts a matric.
   CHECK_MEMBER(algo, names(mul.out))
-  out = mul.out[[algo]]
-  maxT = length(out)
+  algoOut = mul.out[[algo]]  # LIST[[t]] = matrix(p x n)
+  maxT = length(algoOut)
   CHECK_EQ(experiment$niters, maxT)
-  CHECK_EQ(experiment$p, nrow(out[[1]]))
-  sapply(1:maxT, function(t) fn(out[[t]]))
+  CHECK_EQ(experiment$p, nrow(algoOut[[1]]))
+  res = fn(algoOut[[1]])
+  CHECK_TRUE(is.null(dim(res)) || length(res) == 1, msg="Output should be 1-dim")
+  sapply(1:maxT, function(t) fn(algoOut[[t]]))
 }
-
 
 CHECK_dataset <- function(dataset) {
   CHECK_SETEQ(names(dataset), c("X", "Y"))
@@ -191,11 +200,4 @@ CHECK_onlineOutput <- function(onlineOut) {
   CHECK_MEMBER(names(onlineOut), c("estimates", "last"))
   CHECK_numeric(onlineOut$estimates)
   CHECK_EQ(onlineOut$estimates[ , ncol(onlineOut$estimates)], onlineOut$last)
-}
-
-CHECK_benchmark <- function(benchmark) {
-  CHECK_MEMBER(names(benchmark), c("onlineAlgorithms", "experiment"))
-  e = benchmark$experiment
-  CHECK_experiment(e)
-  CHECK_EQ(benchmark$risk(e$theta.star), 0, msg="Risk for benchmark")
 }

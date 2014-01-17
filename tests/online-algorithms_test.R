@@ -1,6 +1,37 @@
 ## Unit-tests for the online algorithms module.
 source("online-algorithms.R")
 
+kCurrentLogLevel <- 0
+test.run.online.many <- function() {
+  e = normal.experiment(niters=20, p=10)
+  algos = c("sgd.onlineAlgorithm", "implicit.WrongName")
+  CHECK_EXCEPTION(run.online.algorithm.many(e, algos, nsamples=10))
+  algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
+  mulOut = run.online.algorithm.many(e, algos, 10)
+  cov.fn <- function(m) sum(diag(cov(t(m))))
+  
+  # 1. Check the covariance calculation.
+  random.algo = sample(algos, 1)
+  sampleCovMatrix = mul.OnlineOutput.mapply(e, mulOut, algo=random.algo, fn=cov.fn)
+  t = sample(1:e$niters, 1)
+  shouldBe = sum(diag(cov(t(mulOut[[random.algo]][[t]]))))
+  loginfo(sprintf("Testing covariance matrix t=%d, algo=%s tr(S)=%.3f",
+                  t, random.algo, sampleCovMatrix[t]))
+  CHECK_NEAR(sampleCovMatrix[t], shouldBe, msg="Correct covariance matrix")
+  
+  # 2. Check the average calculation
+  random.algo = sample(algos, 1)
+  # this will be S(t) = mean(max(θtj))
+  # Recall θtj = the (p x 1) vector at iteration t in sample j
+  sampleAverage = mul.OnlineOutput.vapply(e, mulOut, algo=random.algo,
+                                          theta.t.fn=max, summary.fn=mean)
+  t = sample(1:e$niters, 1)
+  shouldBe = mean(apply(mulOut[[random.algo]][[t]], 2, max))
+  loginfo(sprintf("Testing vapply t=%d, algo=%s mean(max(theta))=%.3f",
+                  t, random.algo, sampleAverage[t]))
+  CHECK_NEAR(sampleAverage[t], shouldBe, msg="Correct covariance matrix")
+}
+
 test.sgd <- function() {
   p = 10
   n = 100
@@ -23,6 +54,7 @@ test.sgd <- function() {
   d$Y = matrix(y, ncol=1)
   
   out = run.online.algorithm(d, e, algorithm=sgd.onlineAlgorithm)
+  print(sprintf("CHECKING true estimates."))
   CHECK_TRUE(all(out$estimates == xsums))
 }
 

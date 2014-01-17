@@ -1,3 +1,6 @@
+# Copyright (c) 2013
+# Panos Toulis, ptoulis@fas.harvard.edu
+#
 # Online algorithms.
 source("terminology.R")
 source("experiment.R")

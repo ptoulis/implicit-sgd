@@ -1,3 +1,6 @@
+# Copyright (c) 2013
+# Panos Toulis, ptoulis@fas.harvard.edu
+#
 library(mvtnorm)  # recall rmvnorm(n,...) returns n x p matrix.
 
 base.learning.rate <- function(t, gamma0, alpha, c) {
