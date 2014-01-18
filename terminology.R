@@ -18,6 +18,7 @@ source("../r-toolkit/logs.R")
 #   score.function = \nabla loglik(theta, data_t) = score function
 #   learning.rate = function (t, ...) = gives the learning rate > 0
 #   Vx = covariance matrix of xt (covariates/features)
+#   Sigma = theoretical covariance matrix for t θt  , t -> infty
 #
 # An OnlineAlgorithm is defined by a function that accepts 
 #   t = no. of iteration
@@ -133,9 +134,9 @@ mul.OnlineOutput.mapply <- function(experiment,
   maxT = length(algoOut)
   CHECK_EQ(experiment$niters, maxT)
   CHECK_EQ(experiment$p, nrow(algoOut[[1]]))
-  res = fn(algoOut[[1]])
+  res = fn(algoOut[[1]], 1)
   CHECK_TRUE(is.null(dim(res)) || length(res) == 1, msg="Output should be 1-dim")
-  sapply(1:maxT, function(t) fn(algoOut[[t]]))
+  sapply(1:maxT, function(t) fn(algoOut[[t]], t))
 }
 
 CHECK_dataset <- function(dataset) {
@@ -169,7 +170,7 @@ CHECK_numeric <- function(x) {
 CHECK_experiment <- function(experiment) {
   CHECK_MEMBER(names(experiment),
                c("name", "p", "theta.star", "niters", 
-                 "sample.dataset", "Vx",
+                 "sample.dataset", "Vx", "Sigma",
                  "score.function",
                  "learning.rate",
                  "risk"), msg="Correct fields for the experiment")

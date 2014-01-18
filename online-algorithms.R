@@ -13,6 +13,7 @@ run.online.algorithm.many <- function(experiment,
   # The result will be a LIST of the form
   #   out[[algoName]][[#sample]]
   # e.g. out[[sgd.onlineAlgorithm]][[5]] = 5th-sample (OnlineOutput object)
+  # So out[[sgd]][[5]] has #nsamples of θ5
   algo.fn = onlineAlgorithm.wrapper(algorithm.names)
   # initialize
   out.all = list()

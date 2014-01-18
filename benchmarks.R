@@ -49,6 +49,8 @@ plot.low.high <- function(data, experiment, draw) {
     defaultYlimMin = ifelse(logY, -3, 10^-3)
     defaultYlimMax = ifelse(logY, 3, 10^3)
     ylims = c(min(defaultYlimMin, min(ymin)), min(defaultYlimMax, max(ymax)))
+    if(is.element("ylims", names(draw)))
+      ylims = draw$ylims
     
     if(i==1) {
       plot(x, ymax, main=title, 
@@ -100,28 +102,30 @@ generic.benchmark <- function(algos, experiment, nsamples,
                                                       theta.t.fn, summary.max)
     } else {
       theta.fn <- process.params$theta.fn
-      data[[algoName]]$low = summary.min(mul.OnlineOutput.mapply(experiment, mul.out, algoName, theta.fn))
-      data[[algoName]]$high = summary.max(mul.OnlineOutput.vapply(experiment, mul.out, algoName, theta.fn))
+      data[[algoName]]$low = mul.OnlineOutput.mapply(experiment, mul.out, algoName, theta.fn)
+      data[[algoName]]$high = mul.OnlineOutput.mapply(experiment, mul.out, algoName, theta.fn)
     }
   }
   return(data)
 }
 
 bias.benchmark.asymptotics <- function() {
+  # 0. Define algorithms, basic setup.
   algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
-  e = normal.experiment(niters=300, p=100)
-  e$learning.rate <- function(t) 2 / (1+t)
-  #base.learning.rate(t, gamma0=1/sum(diag(e$Vx)),      alpha=0.1, c=1)
-  nsamples = 10
+  e = normal.experiment(niters=500, p=10)
+  nsamples = 20
+  
+  # 1. Post-processing functions (aggregation)
   dist = function(theta) vector.dist(theta, e$theta.star)
   process.params = list(vapply=T, theta.fn=dist)
-  # 1. Run the algorithms. Get a MultipleOnlineOutput object.
+  
+  # 2. Run the algorithms. Get a MultipleOnlineOutput object.
   data = generic.benchmark(algos=algos, 
                            experiment=e,
                            nsamples=nsamples,
                            process.params=process.params)
   # 3. Plot low/high curves.
-  draw = list(x=1:e$niters, logY=F, logX=F,
+  draw = list(x=1:e$niters, logY=T, logX=F,
               main="Bias asymptotics", xlab="Iterations", ylab="|| bias ||")
   plot.low.high(data, e, draw)
 }
@@ -159,10 +163,40 @@ bias.benchmark.learningRate <- function() {
 
 
 variance.benchmark.asymptotics <- function() {
+  # 0. Define algorithms, basic setup.
   algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
-  e = normal.experiment(niters=300, p=100)
-  e$learning.rate <- function(t) 0.05 / t
-  nsamples = 10
+  e = normal.experiment(niters=2000, p=5)
+  nsamples = 500
+  e$learning.rate <- function(t) {
+    # stop("Need to define learning rate per-application.")
+    gamma0 = 1.0 / sum(diag(e$Vx))
+    base.learning.rate(t, gamma0=gamma0, alpha=0.05, c=1)
+  }
+  # 1. Post-processing functions (aggregation)
+  U = matrix(runif(e$p^2), nrow=e$p)
+  U = e$Sigma
+  dist = function(theta.matrix, t) {
+    maxT = e$niters
+    CHECK_EQ(nrow(theta.matrix), e$p)
+    CHECK_EQ(ncol(theta.matrix), nsamples)
+    C = cov(t(theta.matrix))
+    if(t==e$niters) {
+      print(t*C)
+      print(U)
+    }
+    matrix.dist(t * C, U)
+  }
+  process.params = list(vapply=F, theta.fn=dist)
+  
+  # 2. Run the algorithms. Get a MultipleOnlineOutput object.
+  data = generic.benchmark(algos=algos, 
+                           experiment=e,
+                           nsamples=nsamples,
+                           process.params=process.params)
+  # 3. Plot low/high curves.
+  draw = list(x=1:e$niters, logY=T, logX=F,
+              main="Variance asymptotics", xlab="Iterations", ylab="|| Covariance ||")
+  plot.low.high(data, e, draw)
 }
 
 
