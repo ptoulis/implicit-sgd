@@ -1,7 +1,8 @@
 ## Unit-tests for the online algorithms module.
 source("online-algorithms.R")
-
+# Sets the log level. 0 = print everything.
 kCurrentLogLevel <- 0
+
 test.run.online.many <- function() {
   e = normal.experiment(niters=20, p=10)
   algos = c("sgd.onlineAlgorithm", "implicit.WrongName")
