@@ -101,11 +101,13 @@ normal.experiment <- function(niters, p=100) {
     # stop("Need to define learning rate per-application.")
     base.learning.rate(t, gamma0=gamma0, alpha=0.05, c=1)
   }
+  
   # 4b. Theoretical variance
   at.limit = experiment$learning.rate(10^8) * 10^8  # limit of rate.
   I = diag(p)
   experiment$Sigma = at.limit^2 * solve(2 * at.limit * A - I) %*% A
   CHECK_TRUE(all(eigen(experiment$Sigma)$values > 0))
+  
   # 5. Define the risk . This is usually the negative log-likelihood
   truth = experiment$theta.star
   experiment$risk <- function(theta) {
