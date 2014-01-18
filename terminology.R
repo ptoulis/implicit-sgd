@@ -44,6 +44,11 @@ source("../r-toolkit/logs.R")
 #   out[[sgd.onlineAlgorithm]][[t]] = matrix(p x nsamples)
 # has all the samples of θt    (nsamples)
 # 
+# A BENCHMARK is a LIST object with the following structure:
+#  BENCHMARK{algoName}{high/low} = vector of values.
+# This is the output of generic.benchmark().
+# A multiple benchmark is a LIST of BENCHMARK objects.
+# 
 
 get.dataset.point <- function(dataset, t) {
   CHECK_TRUE(nrow(dataset$X) >= t && nrow(dataset$Y) >= t)
@@ -111,7 +116,15 @@ mul.OnlineOutput.vapply <- function(experiment,
   maxT = length(out)
   CHECK_EQ(experiment$niters, maxT)
   CHECK_EQ(experiment$p, nrow(out[[1]]))
-  sapply(1:maxT, function(t) summary.fn(apply(out[[t]], 2, theta.t.fn)))
+  # out = LIST(1..niters) of (p x n) matrices.
+  sapply(1:maxT, function(t) {
+    thetat.samples = out[[t]]
+    # For each sample, compress the parameter vector to one value.
+    one.theta = apply(thetat.samples, 2, function(x) theta.t.fn(x, t))
+    # one.theta = vector (samples x 1)
+    # Summarize the sample vector.
+    summary.fn(one.theta)
+  })
 }
 
 mul.OnlineOutput.mapply <- function(experiment,
@@ -136,7 +149,21 @@ mul.OnlineOutput.mapply <- function(experiment,
   CHECK_EQ(experiment$p, nrow(algoOut[[1]]))
   res = fn(algoOut[[1]], 1)
   CHECK_TRUE(is.null(dim(res)) || length(res) == 1, msg="Output should be 1-dim")
-  sapply(1:maxT, function(t) fn(algoOut[[t]], t))
+  sapply(1:maxT, function(t) {
+    thetat.samples = algoOut[[t]]
+    fn(thetat.samples, t)
+  })
+}
+
+CHECK_benchmark <- function(benchmark) {
+  CHECK_MEMBER(names(benchmark), kImplementedOnlineAlgorithms)
+  for(algo in names(benchmark)) {
+    CHECK_SETEQ(names(benchmark[[algo]]), c("low", "high"))
+    for(i in names(benchmark[[algo]])) {
+      CHECK_numeric(benchmark[[algo]][[i]])
+      CHECK_TRUE(is.vector(benchmark[[algo]][[i]]))
+    }
+  } 
 }
 
 CHECK_dataset <- function(dataset) {
