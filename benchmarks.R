@@ -180,10 +180,6 @@ variance.benchmark.asymptotics <- function() {
     CHECK_EQ(nrow(theta.matrix), e$p)
     CHECK_EQ(ncol(theta.matrix), nsamples)
     C = cov(t(theta.matrix))
-    if(t==e$niters) {
-      print(t*C)
-      print(U)
-    }
     matrix.dist(t * C, U)
   }
   process.params = list(vapply=F, theta.fn=dist)
