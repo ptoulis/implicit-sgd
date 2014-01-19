@@ -215,8 +215,8 @@ bias.benchmark.learningRate <- function() {
 variance.benchmark.asymptotics <- function() {
   # 0. Define algorithms, basic setup.
   algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
-  e = normal.experiment(niters=2000, p=5)
-  nsamples = 500
+  e = normal.experiment(niters=1000, p=5)
+  nsamples = 3000
 
   # 1. Post-processing functions (aggregation)
   U = e$Sigma
