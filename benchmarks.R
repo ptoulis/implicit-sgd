@@ -7,6 +7,12 @@
 source("online-algorithms.R")
 library(scales)
 
+get.benchmark.filename <- function(name, experiment, ext) {
+  filename = sprintf("%s-p%d-i%d.%s", 
+                     name, experiment$p, experiment$niters, ext)
+  return(filename)
+}
+
 vector.dist <- function(x1, x2) {
   m1 = matrix(x1, ncol=1)
   m2 = matrix(x2, ncol=1)
@@ -161,6 +167,7 @@ bias.benchmark.asymptotics <- function() {
   draw = list(x=1:e$niters, logY=T, logX=F,
               main="Bias asymptotics", xlab="Iterations", ylab="|| bias ||")
   plot.low.high(benchmark, e, draw)
+  return(benchmark)
 }
 
 bias.benchmark.learningRate <- function() {
@@ -171,6 +178,7 @@ bias.benchmark.learningRate <- function() {
   dist = function(theta, t) vector.dist(theta, base.experiment$theta.star)
   process.params = list(vapply=T, theta.fn=dist)
   
+  # 1. Different learning rates to check.
   alpha.values = seq(0.01, 10, length.out=20)
   for(i in 1:length(alpha.values)) {
     tmp.e = base.experiment
@@ -179,11 +187,11 @@ bias.benchmark.learningRate <- function() {
     experiment.list[[i]] = tmp.e
   }
 
-  # Run all benchmarks. Get a LIST of benchmarks.
+  # 2. Run all benchmarks. Get a LIST of benchmarks.
   benchmark.list = generic.benchmark.many(algos, experiment.list, nsamples, process.params)
   CHECK_EQ(length(experiment.list), length(alpha.values))
   
-  ## Return object. A new benchmark object.
+  ## 3. Populate return object.
   benchmark = list()
   
   for(algoName in algos) {
@@ -196,10 +204,11 @@ bias.benchmark.learningRate <- function() {
                                           max(benchmark.list[[i]][[algoName]]$high)
                                         })
   }
-  
+  # 4. Define draw parameters.
   draw = list(x=alpha.values, logY=T, logX=F,
               main="Bias learning rate", xlab="alpha", ylab="|| bias ||")
-  # 3. Plot low/high curves.
+  
+  # 5. Plot low/high curves.
   plot.low.high(benchmark, base.experiment, draw)
 }
 
@@ -208,13 +217,8 @@ variance.benchmark.asymptotics <- function() {
   algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
   e = normal.experiment(niters=2000, p=5)
   nsamples = 500
-  e$learning.rate <- function(t) {
-    # stop("Need to define learning rate per-application.")
-    gamma0 = 1.0 / sum(diag(e$Vx))
-    base.learning.rate(t, gamma0=gamma0, alpha=0.05, c=1)
-  }
+
   # 1. Post-processing functions (aggregation)
-  U = matrix(runif(e$p^2), nrow=e$p)
   U = e$Sigma
   dist = function(theta.matrix, t) {
     maxT = e$niters
@@ -233,7 +237,51 @@ variance.benchmark.asymptotics <- function() {
   # 3. Plot low/high curves.
   draw = list(x=1:e$niters, logY=T, logX=F,
               main="Variance asymptotics", xlab="Iterations", ylab="|| Covariance ||")
+  
   plot.low.high(benchmark, e, draw)
+}
+
+variance.benchmark.learningRate <- function() {
+  algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
+  base.experiment = normal.experiment(niters=400, p=5)
+  nsamples = 50
+ 
+  dist = function(theta.matrix, shouldBe.matrix, t) {
+    maxT = e$niters
+    CHECK_EQ(nrow(theta.matrix), e$p)
+    CHECK_EQ(ncol(theta.matrix), nsamples)
+    C = cov(t(theta.matrix))
+    matrix.dist(t * C, shouldBe.matrix)
+  }
+  
+  # 1. Different learning rates to check.
+  alpha.values = seq(0.01, 10, length.out=20)
+  benchmark = list()
+  
+  for(i in 1:length(alpha.values)) {
+    e = base.experiment
+    alpha = alpha.values[i]
+    e$learning.rate <- function(t) alpha * base.experiment$learning.rate(t)
+    I = diag(e$p)
+    A = alpha^2 * solve(2 * alpha * e$Vx - I) %*% e$Vx
+    
+    fn = function(theta.matrix, t) dist(theta.matrix, A, t)
+    process.params = list(vapply=T, theta.fn=fn)
+    
+    tmp.bench = generic.benchmark(algos=algos, 
+                                  experiment=e,
+                                  nsamples=nsamples,
+                                  process.params=process.params)
+    
+    
+  }
+  
+  # 4. Define draw parameters.
+  draw = list(x=alpha.values, logY=T, logX=F,
+              main="Bias learning rate", xlab="alpha", ylab="|| bias ||")
+  
+  # 5. Plot low/high curves.
+  plot.low.high(benchmark, base.experiment, draw)
 }
 
 
