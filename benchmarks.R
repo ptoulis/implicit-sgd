@@ -281,6 +281,7 @@ variance.benchmark.asymptotics <- function(p=10, niters=300, nsamples=10) {
   I = diag(experiment$p)
   Sigma.theoretical = alpha^2 * solve(2 * alpha * J - I) %*% J
   CHECK_NEAR(sum(diag(Sigma.theoretical)), sum(diag(experiment$Sigma)))
+  CHECK_TRUE(all(eigen(Sigma.theoretical)$values >= 0))
   # 1. Post-processing functions (aggregation)
   
   dist = function(theta.matrix, t) {
