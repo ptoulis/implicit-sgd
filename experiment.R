@@ -78,6 +78,7 @@ normal.experiment <- function(niters, p=100) {
   # 1. Define θ*
   experiment = empty.experiment(niters)
   experiment$name = "normal"
+  # experiment$theta.star = matrix(runif(p, min=0, max=5), ncol=1) 
   experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
   experiment$p = p
   u = 0.5 * runif(p)
