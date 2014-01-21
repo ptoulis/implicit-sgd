@@ -34,6 +34,14 @@ glm.score.function <- function(h.transfer, theta, datapoint) {
   with(datapoint, matrix((yt - yt.hat) * xt, ncol=1))
 }
 
+copy.experiment <- function(experiment) {
+  e = empty.experiment(experiment$niters)
+  for(i in names(experiment)) {
+    e[[i]] = experiment[[i]]
+  }
+  return(e)
+}
+
 empty.experiment <- function(niters) {
   # returns an empty EXPERIMENT object.
   # Useful for initialization and inspection.
@@ -69,6 +77,7 @@ normal.experiment <- function(niters, p=100) {
   #   p = #parameters (dimension of the problem)
   # 1. Define θ*
   experiment = empty.experiment(niters)
+  experiment$name = "normal"
   experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
   experiment$p = p
   u = 0.5 * runif(p)

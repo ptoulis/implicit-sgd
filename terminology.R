@@ -49,6 +49,8 @@ source("../r-toolkit/logs.R")
 # This is the output of generic.benchmark().
 # A multiple benchmark is a LIST of BENCHMARK objects.
 # 
+# A BenchmarkFile is a LIST with {BENCHMARK, EXPERIMENT, DRAW}
+# This is used to save intermediate results in file.
 
 get.dataset.point <- function(dataset, t) {
   CHECK_TRUE(nrow(dataset$X) >= t && nrow(dataset$Y) >= t)
