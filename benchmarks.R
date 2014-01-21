@@ -285,7 +285,8 @@ variance.benchmark.asymptotics <- function(p=10, niters=300, nsamples=10) {
   # 1. Post-processing functions (aggregation)
   
   dist = function(theta.matrix, t) {
-    maxT = e$niters
+    maxT = experiment$niters
+    CHECK_EQ(maxT, niters)
     CHECK_EQ(nrow(theta.matrix), experiment$p)
     CHECK_EQ(ncol(theta.matrix), nsamples)
     C = cov(t(theta.matrix))
