@@ -8,7 +8,10 @@ source("online-algorithms.R")
 library(scales)
 
 get.benchmark.filename <- function(prefix, experiment, nsamples, ext) {
-  filename = sprintf("out/%s-%s-p%d-t%d-s%d.%s", 
+  folder = ifelse(length(grep("/n/home", getwd()))==1, "out/odyssey", "out")
+  
+  filename = sprintf("%s/%s-%s-p%d-t%d-s%d.%s",
+                     folder,
                      prefix, experiment$name, 
                      experiment$p, 
                      experiment$niters,
