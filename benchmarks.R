@@ -33,7 +33,7 @@ matrix.dist <- function(m1, m2) {
   norm(m1-m2, "F") / sqrt(nrow(m1) * ncol(m1))
 }
 
-plot.benchmark <- function(benchmarkObjectORFile) {
+plot.benchmark <- function(benchmarkObjectORFile, toPng=F) {
   # Will plot the low-high values of the benchmark
   # according to the drawing parameters in "draw"
   #
@@ -78,6 +78,10 @@ plot.benchmark <- function(benchmarkObjectORFile) {
   xlab = draw$xlab
   ylab = draw$ylab
   ## Plotting.
+  if(toPng) {
+    png(file=get.benchmark.filename("plot", benchmark=benchmark, ext="png"))
+  }
+  
   for(i in 1:length(algos)) {
     algoName = algos[i]
     ymin = benchmark.algo.low(benchmark, algoName)
@@ -93,6 +97,7 @@ plot.benchmark <- function(benchmarkObjectORFile) {
     if(is.element("ylims", names(draw)))
       ylims = draw$ylims
     
+  
     if(i==1) {
       plot(x, ymax, main=title, 
            xlab=xlab,
@@ -104,6 +109,8 @@ plot.benchmark <- function(benchmarkObjectORFile) {
     }
     polygon(c(x, rev(x)), c(ymin, rev(ymax)), col=alpha(cols[i], 0.2), lty=i)
   }
+  if(toPng)
+    graphics.off()
 }
 
 save.benchmark <- function(description, benchmark) {
