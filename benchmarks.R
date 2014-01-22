@@ -7,9 +7,13 @@
 source("online-algorithms.R")
 library(scales)
 
-get.benchmark.filename <- function(prefix, benchmark, ext) {
+get.out.folder <- function() {
   folder = ifelse(length(grep("/n/home", getwd()))==1, "out/odyssey", "out")
-  
+  return(folder)
+}
+
+get.benchmark.filename <- function(prefix, benchmark, ext) {
+  folder = get.out.folder()  
   filename = sprintf("%s/%s-%s-p%d-t%d-s%d.%s",
                      folder,
                      prefix,
@@ -19,6 +23,17 @@ get.benchmark.filename <- function(prefix, benchmark, ext) {
                      benchmark.nsamples(benchmark),
                      ext)
   return(filename)
+}
+
+plot.all.benchmarks <- function() {
+  all.files = list.files(get.out.folder(), full.names=T)
+  rdata.files = all.files[grep("Rdata", all.files)]
+  kCurrentLogLevel <<- 0
+  for(file in rdata.files) {
+    loginfo(sprintf("Loading benchmark %s for plotting. Please wait..", file))
+    plot.benchmark(file, T)
+    loginfo("Done.")
+  }
 }
 
 vector.dist <- function(x1, x2) {
