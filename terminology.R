@@ -5,6 +5,10 @@ rm(list=ls())
 source("../r-toolkit/checks.R")
 source("../r-toolkit/logs.R")
 
+# For convenience.
+kSGD = "sgd.onlineAlgorithm"
+kIMPLICIT = "implicit.onlineAlgorithm"
+
 # Assume we have a parametric statistical model with a p x 1 parameter "theta"
 #
 # Define DATAPOINT to be a list(xt, yt) where xt = px1 vector, yt=1dim value
@@ -44,10 +48,14 @@ source("../r-toolkit/logs.R")
 #   out[[sgd.onlineAlgorithm]][[t]] = matrix(p x nsamples)
 # has all the samples of θt    (nsamples)
 # 
-# A BENCHMARK is a LIST object with the following structure:
-#  BENCHMARK{algoName}{high/low} = vector of values.
-# This is the output of generic.benchmark().
-# A multiple benchmark is a LIST of BENCHMARK objects.
+# A BENCHMARK is a LIST object {mulOut, lowHigh, experiment}:
+#   mulOut = MultipleOnlineOutput object (all data)
+#   lowHigh = LIST{algoName}{low/high} = [] vector of values
+#   experiment = EXPERIMENT that generated the data
+#   draw = OPTIONAL draw params
+#
+# This is the output of generic.benchmark(). 
+# A MultipleBenchmark is a LIST of BENCHMARK objects.
 # 
 # A BenchmarkFile is a LIST with {BENCHMARK, EXPERIMENT, DRAW}
 # This is used to save intermediate results in file.
@@ -157,16 +165,68 @@ mul.OnlineOutput.mapply <- function(experiment,
   })
 }
 
+benchmark.nsamples <- function(benchmark) {
+  algo1 = names(benchmark$mulOut)[1]
+  return(ncol(benchmark$mulOut[[algo1]][[1]]))
+}
+
+benchmark.niters <- function(benchmark) {
+  algo = benchmark.algos(benchmark)[1]
+  return(length(benchmark$mulOut[[algo]]))
+}
+
+benchmark.theta.samples <- function(benchmark, algoName, t) {
+  x  = benchmark$mulOut[[algoName]][[t]]
+  CHECK_TRUE(!is.null(x))
+  return(x)
+}
+
+benchmark.algos <- function(benchmark) {
+  return(names(benchmark$mulOut))
+}
+
+benchmark.algo.low <- function(benchmark, algoName) {
+  x = as.numeric(benchmark$lowHigh[[algoName]]$low)
+  CHECK_TRUE(!is.null(x))
+  return(x)
+}
+
+benchmark.algo.high <- function(benchmark, algoName) {
+  x = as.numeric(benchmark$lowHigh[[algoName]]$high)
+  CHECK_TRUE(!is.null(x))
+  return(x)
+}
+
+
 CHECK_benchmark <- function(benchmark) {
-  CHECK_MEMBER(names(benchmark), kImplementedOnlineAlgorithms)
-  for(algo in names(benchmark)) {
-    CHECK_SETEQ(names(benchmark[[algo]]), c("low", "high"))
+  CHECK_MEMBER(names(benchmark), c("mulOut", "lowHigh", "experiment", "draw"))
+  CHECK_MEMBER(names(benchmark$lowHigh), kImplementedOnlineAlgorithms)
+  CHECK_multipleOnlineOutput(benchmark$mulOut, experiment=benchmark$experiment)
+  
+  for(algo in names(benchmark$lowHigh)) {
+    CHECK_SETEQ(names(benchmark$lowHigh[[algo]]), c("low", "high"))
     for(i in names(benchmark[[algo]])) {
       CHECK_numeric(benchmark[[algo]][[i]])
       CHECK_TRUE(is.vector(benchmark[[algo]][[i]]))
     }
-  } 
+  }
+  algos = benchmark.algos(benchmark)
+  ralgo = sample(algos, 1)
+  # 0. Same algos.
+  CHECK_SETEQ(names(benchmark$lowHigh), algos)
+  # 1. check consistency in lengths (niters)
+  CHECK_EQ(benchmark$experiment$niters, length(benchmark$mulOut[[ralgo]]))
+  # 2. Check consistency in "p" (#params)
+  CHECK_EQ(benchmark$experiment$p, nrow(benchmark.theta.samples(benchmark, ralgo, 1)))
+  # 3. Check consistency in "nsamples"
+  for(algo in names(benchmark$mulOut)) {
+    niters = benchmark.niters(benchmark)
+    random.t = sample(1:niters, 1)
+    CHECK_TRUE(ncol(benchmark.theta.samples(benchmark, algoName=algo, random.t)),
+               ncol(benchmark.theta.samples(benchmark, algo, 1)))
+  }
 }
+
 
 CHECK_dataset <- function(dataset) {
   CHECK_SETEQ(names(dataset), c("X", "Y"))
@@ -199,7 +259,7 @@ CHECK_numeric <- function(x) {
 CHECK_experiment <- function(experiment) {
   CHECK_MEMBER(names(experiment),
                c("name", "p", "theta.star", "niters", 
-                 "sample.dataset", "Vx", "Sigma",
+                 "sample.dataset", "Vx", "J",
                  "score.function",
                  "learning.rate",
                  "risk"), msg="Correct fields for the experiment")

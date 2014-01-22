@@ -62,7 +62,7 @@ get.experiment <- function(name="normal",
   return(e)
 }
 
-normal.experiment <- function(niters, p=100) {
+normal.experiment <- function(niters, p=100, lr.scale=1.0) {
   # Normal experiment (linear regression)
   # Defined in Xu (2011), Section 6.2, p.8
   #
@@ -75,13 +75,14 @@ normal.experiment <- function(niters, p=100) {
   # Args:
   #   niters = number of samples (also #iterations for online algorithms)
   #   p = #parameters (dimension of the problem)
+  #   lr.scale = scale of learning rate
   # 1. Define θ*
   experiment = empty.experiment(niters)
   experiment$name = "normal"
   # experiment$theta.star = matrix(runif(p, min=0, max=5), ncol=1) 
   experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
   experiment$p = p
-  u = 0.5 * runif(p)
+  u = rep(0.2, p)
   A = diag(seq(0.1, 1, length.out=p)) + u %*% t(u)
   # A = matrix(runif(p^2, min=0, max=1), nrow=p)
   # A = A %*% t(A)
@@ -109,14 +110,11 @@ normal.experiment <- function(niters, p=100) {
   # 4. Define the learning rate
   experiment$learning.rate <- function(t) {
     # stop("Need to define learning rate per-application.")
-    base.learning.rate(t, gamma0=gamma0, alpha=0.05, c=1)
+    lr.scale * base.learning.rate(t, gamma0=gamma0, alpha=0.05, c=1)
   }
   
-  # 4b. Theoretical variance
-  at.limit = experiment$learning.rate(10^8) * 10^8  # limit of rate.
-  I = diag(p)
-  experiment$Sigma = at.limit^2 * solve(2 * at.limit * A - I) %*% A
-  CHECK_TRUE(all(eigen(experiment$Sigma)$values > 0))
+  # 4b. Fisher information
+  experiment$J = A
   
   # 5. Define the risk . This is usually the negative log-likelihood
   truth = experiment$theta.star

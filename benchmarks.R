@@ -7,15 +7,16 @@
 source("online-algorithms.R")
 library(scales)
 
-get.benchmark.filename <- function(prefix, experiment, nsamples, ext) {
+get.benchmark.filename <- function(prefix, benchmark, ext) {
   folder = ifelse(length(grep("/n/home", getwd()))==1, "out/odyssey", "out")
   
   filename = sprintf("%s/%s-%s-p%d-t%d-s%d.%s",
                      folder,
-                     prefix, experiment$name, 
-                     experiment$p, 
-                     experiment$niters,
-                     nsamples,
+                     prefix,
+                     benchmark$experiment$name, 
+                     benchmark$experiment$p, 
+                     benchmark$experiment$niters,
+                     benchmark.nsamples(benchmark),
                      ext)
   return(filename)
 }
@@ -32,7 +33,7 @@ matrix.dist <- function(m1, m2) {
   norm(m1-m2, "F") / sqrt(nrow(m1) * ncol(m1))
 }
 
-plot.benchmarkFile <- function(benchmarkFile) {
+plot.benchmark <- function(benchmarkObjectORFile) {
   # Will plot the low-high values of the benchmark
   # according to the drawing parameters in "draw"
   #
@@ -48,23 +49,22 @@ plot.benchmarkFile <- function(benchmarkFile) {
   experiment = NA
   draw = NA
   
-  if(is.character(benchmarkFile)) {
-    if(!file.exists(benchmarkFile)) {
-      print(sprintf("File %s does not exist..", benchmarkFile))
+  if(is.character(benchmarkObjectORFile)) {
+    if(!file.exists(benchmarkObjectORFile)) {
+      print(sprintf("File %s does not exist..", benchmarkObjectORFile))
       return()
     }
-    load(benchmarkFile)
-    benchmark = benchmarkFile$benchmark
-    experiment = benchmarkFile$experiment
-    draw = benchmarkFile$draw
+    load(benchmarkObjectORFile)
+    experiment = benchmark$experiment
+    draw = benchmark$draw
   } else {
-    benchmark = benchmarkFile$benchmark
-    experiment = benchmarkFile$experiment
-    draw = benchmarkFile$draw
+    benchmark = benchmarkObjectORFile
+    experiment = benchmark$experiment
+    draw = benchmark$draw
   }
   CHECK_benchmark(benchmark)
   # Done loading
-  algos = names(benchmark)  # algorithm names (character)
+  algos = benchmark.algos(benchmark)  # algorithm names (character)
   niters = experiment$niters  # no. of iterations
   cols = topo.colors(length(algos))  # colors.
   x = draw$x  # x-axis
@@ -80,8 +80,8 @@ plot.benchmarkFile <- function(benchmarkFile) {
   ## Plotting.
   for(i in 1:length(algos)) {
     algoName = algos[i]
-    ymin = benchmark[[algoName]]$low
-    ymax = benchmark[[algoName]]$high
+    ymin = benchmark.algo.low(benchmark, algoName)
+    ymax = benchmark.algo.high(benchmark, algoName)
     if(logY) {
       ymin = log(ymin)
       ymax = log(ymax)
@@ -106,17 +106,21 @@ plot.benchmarkFile <- function(benchmarkFile) {
   }
 }
 
-save.benchmarkFile <- function(description,
-                               benchmark, experiment,
-                               nsamples, draw) {
-  benchmarkFile = list(benchmark=benchmark,
-                       experiment=experiment,
-                       draw=draw)
+save.benchmark <- function(description, benchmark) {
+  # Saves the BenchmarkFile object.
+  # Gets the name from get.benchmark.filename()
+  #
+  # Args:
+  #   description: A character vector as a filename prefix
+  #   multipleOut: A MultipleOnlineOutput object
+  #   benchmark: A BENCHMARK object.
+  #   experiment : EXPERIMENT (see terminology for all)
+  # 
+  CHECK_benchmark(benchmark)
   filename = get.benchmark.filename(prefix=description,
-                                    experiment,
-                                    nsamples,
+                                    benchmark,
                                     ext="Rdata")
-  save(benchmarkFile, file=filename)
+  save(benchmark, file=filename)
 }
 
 generic.benchmark <- function(algos, experiment, nsamples,
@@ -152,22 +156,25 @@ generic.benchmark <- function(algos, experiment, nsamples,
   # 1. Run the algorithms. Get a MultipleOnlineOutput object.
   mul.out = run.online.algorithm.many(experiment, algos, nsamples=nsamples)
   # 2. Process to get the data
-  benchmark = list()
+  data.lohi = list()
   summary.min = function(x) quantile(x, 0.05)
   summary.max = function(x) quantile(x, 0.95)
   for(algoName in algos) {
     if(process.params$vapply) {
       theta.t.fn <- process.params$theta.fn
-      benchmark[[algoName]]$low = mul.OnlineOutput.vapply(experiment, mul.out, algoName,
+      data.lohi[[algoName]]$low = mul.OnlineOutput.vapply(experiment, mul.out, algoName,
                                                           theta.t.fn, summary.min)
-      benchmark[[algoName]]$high = mul.OnlineOutput.vapply(experiment, mul.out, algoName,
+      data.lohi[[algoName]]$high = mul.OnlineOutput.vapply(experiment, mul.out, algoName,
                                                            theta.t.fn, summary.max)
     } else {
       theta.fn <- process.params$theta.fn
-      benchmark[[algoName]]$low = mul.OnlineOutput.mapply(experiment, mul.out, algoName, theta.fn)
-      benchmark[[algoName]]$high = mul.OnlineOutput.mapply(experiment, mul.out, algoName, theta.fn)
+      data.lohi[[algoName]]$low = mul.OnlineOutput.mapply(experiment, mul.out, algoName, theta.fn)
+      data.lohi[[algoName]]$high = mul.OnlineOutput.mapply(experiment, mul.out, algoName, theta.fn)
     }
   }
+  benchmark = list(mulOut=mul.out,
+                   lowHigh=data.lohi,
+                   experiment=experiment)
   CHECK_benchmark(benchmark)
   return(benchmark)
 }
@@ -200,8 +207,7 @@ bias.benchmark.asymptotics <- function(p=10, niters=300, nsamples=10) {
   # 0. Define algorithms, basic setup.
   algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
   e = normal.experiment(niters=niters, p=p)
-  nsamples = nsamples
-  
+
   # 1. Post-processing functions (aggregation)
   dist = function(theta, t) vector.dist(theta, e$theta.star)
   process.params = list(vapply=T, theta.fn=dist)
@@ -214,13 +220,12 @@ bias.benchmark.asymptotics <- function(p=10, niters=300, nsamples=10) {
   # 3. Plot low/high curves.
   draw = list(x=1:e$niters, logY=T, logX=F,
               main="Bias asymptotics", xlab="Iterations", ylab="|| bias ||")
-  save.benchmarkFile(description="bias-asymp",
-                     benchmark, e,
-                     nsamples, draw)
+  benchmark$draw = draw
+  save.benchmark(description="bias-asymp", benchmark)
   return(benchmark)
 }
 
-bias.benchmark.learningRate <- function(p=10, niters=300, nsamples=10) {
+bias.benchmark.learningRate <- function(p=10, niters=300, nsamples=10, nalphas=10) {
   algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
   experiment.list = list()
   base.experiment = normal.experiment(niters=niters, p=p)
@@ -229,46 +234,67 @@ bias.benchmark.learningRate <- function(p=10, niters=300, nsamples=10) {
   process.params = list(vapply=T, theta.fn=dist)
   
   # 1. Different learning rates to check.
-  alpha.values = seq(0.01, 2, length.out=10)
-  for(i in 1:length(alpha.values)) {
-    experiment.list[[i]] = copy.experiment(base.experiment)
-    experiment.list[[i]]$learning.rate <- function(t) alpha.values[i] * base.experiment$learning.rate(t)
-  }
-  
+  alpha.values = seq(0.01, 2.5, length.out=nalphas)
   for(i in 1:length(alpha.values)) {
     kCurrentLogLevel <<- 0
-    t = sample(1:10000, 1)
-    CHECK_NEAR(experiment.list[[i]]$learning.rate(t),
-               alpha.values[i] * base.experiment$learning.rate(t),
-               msg="Check if learning rates are set correctly")
+    experiment.list[[i]] = normal.experiment(niters=niters, p=p,
+                                             lr.scale=force(alpha.values[i]))
+    loginfo(sprintf("Learning rate at 10 for alpha=%d is %.4f",
+                    i, experiment.list[[i]]$learning.rate(10)))
+  }
+
+  for(alpha.i in 1:length(alpha.values)) {
+    kCurrentLogLevel <<- 0
+    sample.t = sample(1:niters, 1)
+    lr = experiment.list[[alpha.i]]$learning.rate(sample.t)  # learning-rate
+    lr.shouldBe = base.experiment$learning.rate(sample.t) * alpha.values[alpha.i]
+    
+    CHECK_NEAR(lr, lr.shouldBe, msg="Check if learning rates are set correctly")
   }
 
   # 2. Run all benchmarks. Get a LIST of benchmarks.
+  # b1 = generic.benchmark(algos, experiment.list[[1]], nsamples=nsamples, process.params)
   benchmark.list = generic.benchmark.many(algos, experiment.list, nsamples, process.params)
   CHECK_EQ(length(experiment.list), length(alpha.values))
  
   ## 3. Populate return object.
-  benchmark = list()
-  
+  data.lohi = list()
+
   for(algoName in algos) {
-    benchmark[[algoName]]$low = sapply(1:length(experiment.list),
+    data.lohi[[algoName]]$low = sapply(1:length(experiment.list),
                                        function(i) {
-                                         min(benchmark.list[[i]][[algoName]]$low)
+                                         min(benchmark.algo.low(benchmark.list[[i]],
+                                                                algoName))
                                        })
-    benchmark[[algoName]]$high = sapply(1:length(experiment.list),
+    data.lohi[[algoName]]$high = sapply(1:length(experiment.list),
                                         function(i) {
-                                          max(benchmark.list[[i]][[algoName]]$high)
+                                          max(benchmark.algo.high(benchmark.list[[i]],
+                                                                  algoName))
                                         })
   }
+  
   # 4. Define draw parameters.
   draw = list(x=alpha.values, logY=T, logX=F,
               main="Bias learning rate", xlab="alpha", ylab="|| bias ||")
   
   # 5. Save the benchmark file.
-  save.benchmarkFile(description="bias-lr",
-                     benchmark, base.experiment,
-                     nsamples, draw)
+  # CAUTION: Should use the mulOut object.
+  benchmark = list(mulOut=benchmark.list[[1]]$mulOut,
+                   lowHigh=data.lohi,
+                   experiment=base.experiment,
+                   draw=draw)
+  
+  save.benchmark(description="bias-lr", benchmark)
   return(benchmark)
+}
+
+
+limit.variance <- function(experiment) {
+  J = experiment$J
+  a = experiment$learning.rate(10^9) * 10^9
+  if(a > 100) stop("There is a problem most likely")
+  I = diag(experiment$p)
+  return(a^2 * solve(2 * a * J - I) %*% J)
 }
 
 variance.benchmark.asymptotics <- function(p=10, niters=300, nsamples=10) {
@@ -278,12 +304,8 @@ variance.benchmark.asymptotics <- function(p=10, niters=300, nsamples=10) {
   experiment = normal.experiment(niters=niters, p=p)
   # TODO(ptoulis)
   # Make this into a function.
-  J = experiment$Vx
-  alpha = experiment$learning.rate(10^9) * 10^9
-  loginfo(sprintf("alpha = %.3f", alpha))
-  I = diag(experiment$p)
-  Sigma.theoretical = alpha^2 * solve(2 * alpha * J - I) %*% J
-  CHECK_NEAR(sum(diag(Sigma.theoretical)), sum(diag(experiment$Sigma)))
+  
+  Sigma.theoretical = limit.variance(experiment)
   CHECK_TRUE(all(eigen(Sigma.theoretical)$values >= 0))
   # 1. Post-processing functions (aggregation)
   
@@ -305,11 +327,9 @@ variance.benchmark.asymptotics <- function(p=10, niters=300, nsamples=10) {
   # 3. Plot low/high curves.
   draw = list(x=1:experiment$niters, logY=F, logX=F,
               main="Variance asymptotics", xlab="Iterations", ylab="|| Covariance ||")
-  
+  benchmark$draw = draw
   # 5. Save the benchmark file.
-  save.benchmarkFile(description="variance-asymp",
-                     benchmark, experiment,
-                     nsamples, draw)
+  save.benchmark(description="variance-asymp", benchmark)
   
   return(benchmark)
 }
