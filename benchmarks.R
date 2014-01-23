@@ -187,7 +187,7 @@ summarize.benchmark.list <- function(benchmark.list) {
 }
 
 # CORE functionality of benchmarks.R
-run.benchmarks <- function(mulOutParams.list, processParams.list) {
+execute.benchmarks <- function(mulOutParams.list, processParams.list) {
   # Runs a generic benchmark. The idea is the following:
   #   1) Define the algorithms to be tested
   #   2) Define the experiment (sample.dataset, score function, learning rate)
@@ -259,11 +259,11 @@ run.benchmarks <- function(mulOutParams.list, processParams.list) {
   return(benchmark.list.out)
 }
 
-benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
-                                   max.lr.scale=3.5, nlr.scales=2) {
+run.benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
+                                   max.lr.scale=2.5, nlr.scales=2) {
   #  1. Define processParams.
-  var.processParams = list(name="variance-asymp", vapply=F)
-  bias.processParams = list(name="bias-asymp", vapply=T)
+  var.processParams = list(name="variance-LR", vapply=F)
+  bias.processParams = list(name="bias-LR", vapply=T)
   
   # 2. Define experiments
   base.experiment = normal.experiment(niters=niters, p=p)
@@ -292,26 +292,23 @@ benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
     CHECK_NEAR(lr, lr.shouldBe, msg="Check if learning rates are set correctly")
   }
   
-  var.processParams = list(name="variance-asymp", vapply=F)
-  bias.processParams = list(name="bias.processParams", vapply=T)
-  
   # 3. Define input for run.generic.benchmarks()
   # mulOutParams.list already defined.
   processParams.list = list(bias.processParams, var.processParams)
   
   # 3. Run the algorithms. Get a MultipleOnlineOutput object.
-  benchmark.list = run.benchmarks(mulOutParams.list, processParams.list)
+  benchmark.list = execute.benchmarks(mulOutParams.list, processParams.list)
   
   # 4. (OPTIONAL) Define draw params -- can be changed later.
-  draw = list(x=alpha.values, logY=F, logX=F,
-              main="Variance asymptotics", xlab="alpha", ylab="|| Covariance ||")
-  # 4. Add draw parameters and save
   for(benchmarkName in names(benchmark.list)) {
+    draw = list(x=alpha.values, logY=F, logX=F,
+                main="Variance/Learning rate (lr)", xlab="alpha", ylab="|| Covariance ||")
     benchmark = benchmark.list[[benchmarkName]]
     # Draw params for bias.
     if(length(grep("bias", benchmarkName)) > 0) {
       draw$logY = T
       draw$ylab = "|| bias ||"
+      draw$main = "Bias/Learning rate (lr)"
     }
     benchmark$draw = draw
     # 5. Save the benchmark file.
@@ -319,7 +316,7 @@ benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
   }
 }
 
-benchmark.asymptotics <- function(niters=100, p=100, nsamples=10) {
+run.benchmark.asymptotics <- function(niters=100, p=100, nsamples=10) {
   
   mulOutParams = list(algos = c(kSGD, kIMPLICIT),
                       experiment = normal.experiment(niters=niters, p=p),
@@ -341,7 +338,7 @@ benchmark.asymptotics <- function(niters=100, p=100, nsamples=10) {
   processParams.list = list(bias.processParams, var.processParams)
   
   # 3. Run the algorithms. Get a MultipleOnlineOutput object.
-  benchmark.list = run.benchmarks(mulOutParams.list, processParams.list)
+  benchmark.list = execute.benchmarks(mulOutParams.list, processParams.list)
   
   # 4. (OPTIONAL) Define draw params -- can be changed later.
   draw = list(x=1:experiment$niters, logY=F, logX=F,
