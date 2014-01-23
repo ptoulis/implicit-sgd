@@ -340,10 +340,11 @@ run.benchmark.asymptotics <- function(niters=100, p=100, nsamples=10) {
   benchmark.list = execute.benchmarks(mulOutParams.list, processParams.list)
   
   # 4. (OPTIONAL) Define draw params -- can be changed later.
-  draw = list(x=1:experiment$niters, logY=F, logX=F,
-              main="Variance asymptotics", xlab="Iterations", ylab="|| Covariance ||")
   # 4. Add draw parameters and save
   for(benchmarkName in names(benchmark.list)) {
+    draw = list(x=1:experiment$niters, logY=F, logX=F,
+                main="Variance asymptotics", xlab="Iterations", ylab="|| Covariance ||")
+    
     benchmark = benchmark.list[[benchmarkName]]
     # Draw params for bias.
     if(length(grep("bias", benchmarkName)) > 0) {

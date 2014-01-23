@@ -109,6 +109,7 @@ normal.experiment <- function(niters, p=100, lr.scale=1.0) {
   
   id.fn = function(x) x
   gamma0 = 1 / sum(diag(A))
+  lambda0 = min(eigen(A)$values)
   # 3. Define the score function
   experiment$score.function = function(theta, datapoint) {
     glm.score.function(h.transfer=id.fn, theta, datapoint)
@@ -117,7 +118,7 @@ normal.experiment <- function(niters, p=100, lr.scale=1.0) {
   # 4. Define the learning rate
   experiment$learning.rate <- function(t) {
     # stop("Need to define learning rate per-application.")
-    lr.scale * base.learning.rate(t, gamma0=gamma0, alpha=0.05, c=1)
+    lr.scale * base.learning.rate(t, gamma0=gamma0, alpha=lambda0, c=1)
   }
   
   # 4b. Fisher information
