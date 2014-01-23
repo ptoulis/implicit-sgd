@@ -52,6 +52,10 @@ empty.experiment <- function(niters) {
               sample.dataset=function() {}))
 }
 
+get.experiment.description <- function(experiment) {
+  return(sprintf(" Experiment %s: iters=%d p=%d"))  
+}
+
 get.experiment <- function(name="normal",
                            niters=1000) {
   # Creates an EXPERIMENT object (see terminology)

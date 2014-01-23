@@ -7,7 +7,18 @@
 source("online-algorithms.R")
 library(scales)
 
+limit.variance <- function(experiment) {
+  J = experiment$J
+  a = experiment$learning.rate(10^9) * 10^9
+  if(a > 100) stop("There is a problem most likely")
+  I = diag(experiment$p)
+  return(a^2 * solve(2 * a * J - I) %*% J)
+}
+
 get.out.folder <- function() {
+  # The "out" folder is where we save Rdata (benchmarks raw data)
+  # and plots (png files)
+  #
   folder = ifelse(length(grep("/n/home", getwd()))==1, "out/odyssey", "out")
   return(folder)
 }
@@ -26,6 +37,9 @@ get.benchmark.filename <- function(prefix, benchmark, ext) {
 }
 
 plot.all.benchmarks <- function() {
+  # Goes through all the Rdata files, and then plots the BENCHMARK object
+  # for each one of them
+  #
   all.files = list.files(get.out.folder(), full.names=T)
   rdata.files = all.files[grep("Rdata", all.files)]
   kCurrentLogLevel <<- 0
@@ -94,7 +108,8 @@ plot.benchmark <- function(benchmarkObjectORFile, toPng=F) {
   ylab = draw$ylab
   ## Plotting.
   if(toPng) {
-    png(file=get.benchmark.filename("plot", benchmark=benchmark, ext="png"))
+    png(file=get.benchmark.filename(sprintf("plot-%s", benchmark$name),
+                                    benchmark=benchmark, ext="png"))
   }
   
   for(i in 1:length(algos)) {
@@ -145,258 +160,204 @@ save.benchmark <- function(description, benchmark) {
   save(benchmark, file=filename)
 }
 
-generic.benchmark <- function(algos, experiment, nsamples,
-                              process.params) {
+summarize.benchmark.list <- function(benchmark.list) {
+  if(length(benchmark.list) == 1)
+    return(benchmark.list[[1]])
+  
+  all.index = 1:length(benchmark.list)
+  b1 = benchmark.list[[1]] 
+  data.lowHigh = list()
+  algos = benchmark.algos(b1)
+  
+  for(algoName in algos) {
+    data.lowHigh[[algoName]]$low = 
+      sapply(all.index, function(i) {
+        b = benchmark.list[[i]]
+        min(benchmark.algo.low(b, algoName))
+      })
+    data.lowHigh[[algoName]]$high = 
+      sapply(all.index, function(i) {
+        b = benchmark.list[[i]]
+        max(benchmark.algo.high(b, algoName))
+      })
+  }
+  
+  return(list(name=b1$name, mulOut=b1$mulOut, lowHigh=data.lowHigh, 
+              experiment=b1$experiment))
+}
+
+# CORE functionality of benchmarks.R
+run.benchmarks <- function(mulOutParams.list, processParams.list) {
   # Runs a generic benchmark. The idea is the following:
   #   1) Define the algorithms to be tested
   #   2) Define the experiment (sample.dataset, score function, learning rate)
   #   3) Get #nsamples for each experiment
   #   4) For each sample use process.params to process the output.
   #
-  # Returns a BENCHMARK object (not defined in terminology)
-  # A BENCHMARK object is BENCHMARk{algorithmName}{low/high} = (niters x 1) vector.
-  #
-  # process.params has two fields (vapply, theta.fn):
-  # 
-  # Define theta_tj = j-sample of vector θt. Then:
-  #  If vapply=TRUE then BENCHMARK{algo}{low} = V, 
-  #     where V(t) = 5% quantile (fn(theta_t1), fn(theta_t2)...)
-  #
-  # If vapply=FALSE then BENCHMARK{algo}{low} = V, 
-  #     where V(t) = 5% quantile of fn(theta_tj)  i.e. it is applied in the entire matrix.
+  # Returns a LIST of BENCHMARK objects 
   #
   # Args:
-  #   algos = vector of algorithms (character)
-  #   experiment = EXPERIMENT object.
-  #   nsamples = #samples.
-  #   process.params = LiST(vapply, fn) - process parameters
+  #   A LIST of benchmarkParams object (see terminology)
   #
-  # Returns:
-  #   A BENCHMARK object.
+  # Returns a LIST of BENCHMARK objects, one for each benchmarkParams argument.
   #
-  niters = experiment$niters
-  # 1. Run the algorithms. Get a MultipleOnlineOutput object.
-  mul.out = run.online.algorithm.many(experiment, algos, nsamples=nsamples)
-  # 2. Process to get the data
-  data.lohi = list()
-  summary.min = function(x) quantile(x, 0.05)
-  summary.max = function(x) quantile(x, 0.95)
-  for(algoName in algos) {
-    if(process.params$vapply) {
-      theta.t.fn <- process.params$theta.fn
-      data.lohi[[algoName]]$low = mul.OnlineOutput.vapply(experiment, mul.out, algoName,
-                                                          theta.t.fn, summary.min)
-      data.lohi[[algoName]]$high = mul.OnlineOutput.vapply(experiment, mul.out, algoName,
-                                                           theta.t.fn, summary.max)
-    } else {
-      theta.fn <- process.params$theta.fn
-      data.lohi[[algoName]]$low = mul.OnlineOutput.mapply(experiment, mul.out, algoName, theta.fn)
-      data.lohi[[algoName]]$high = mul.OnlineOutput.mapply(experiment, mul.out, algoName, theta.fn)
+  # Object to be returned.
+  benchmark.list.out = list()
+  
+  # Object to hold the multiple online output
+  for(j in 1:length(mulOutParams.list)) {
+    params = mulOutParams.list[[j]]
+    experiment = params$experiment
+    algos = params$algos
+    nsamples = params$nsamples
+    print(sprintf("Running new experiment (%d/%d): %s",
+                  j, length(mulOutParams.list),
+                  get.experiment.description(experiment)))
+    # 1. Run j-th experiment. Obtain multiple online output.
+    mulOut = run.online.algorithm.many(experiment, algos, nsamples)
+    
+    # 2. For every benchmark, create the BENCHMARK object
+    #   for this particular MultipleOnlineOutput object.
+    for(m in 1:length(processParams.list)) {
+      benchName = processParams.list[[m]]$name
+      processParams = processParams.list[[m]]
+      # 2. Process the raw data using the processParams specification.
+      data.lohi = list()
+      summary.min = function(x) quantile(x, 0.05)
+      summary.max = function(x) quantile(x, 0.95)
+      for(algoName in algos) {
+        if(processParams$vapply) {
+          # Hard-coding the transformation function
+          theta.t.fn <- default.bias.dist(experiment)
+          # Computing low/high values.
+          data.lohi[[algoName]]$low = mul.OnlineOutput.vapply(mulOut, experiment, algoName,
+                                                              theta.t.fn, summary.min)
+          data.lohi[[algoName]]$high = mul.OnlineOutput.vapply(mulOut, experiment, algoName,
+                                                               theta.t.fn, summary.max)
+        } else {
+          theta.fn <- default.var.dist(experiment, nsamples)
+          data.lohi[[algoName]]$low = mul.OnlineOutput.mapply(mulOut, experiment, algoName, theta.fn)
+          data.lohi[[algoName]]$high = mul.OnlineOutput.mapply(mulOut, experiment, algoName, theta.fn)
+        }
+      }
+      
+      benchmark = list(name=benchName, mulOut=mulOut, lowHigh=data.lohi, experiment=experiment)
+      CHECK_benchmark(benchmark)
+      L = length(benchmark.list.out[[benchName]])
+      # 3. Save the BENCHMARK object for each one.
+      benchmark.list.out[[benchName]][[L + 1]] <- benchmark
     }
   }
-  benchmark = list(mulOut=mul.out,
-                   lowHigh=data.lohi,
-                   experiment=experiment)
-  CHECK_benchmark(benchmark)
-  return(benchmark)
-}
-
-generic.benchmark.many <- function(algos, experiment.list, nsamples,
-                                   process.params) {
-  # Runs a generic.benchmark() for every experiment.
-  #
-  # Args:
-  #   algos = vector of algorithms (character)
-  #   experiment.list = LIST of experiments
-  #   nsamples = #samples.
-  #   process.params = LiST(vapply, fn) - process parameters
-  #
-  # Returns:
-  #   A LIST of BENCHMARK objects, one for each EXPERIMENT
-  #
-  benchmark.list = list()
-  for(i in 1:length(experiment.list)) {
-    experiment = experiment.list[[i]]
-    CHECK_experiment(experiment)
-    print(sprintf("Running benchmark for experiment #%d/%d", i, length(experiment.list)))
-    benchmark = generic.benchmark(algos, experiment, nsamples, process.params)
-    benchmark.list[[i]] = benchmark
+  # Final step. Now the benchmark list is {benchmarkName} = LIST{b1, b2, b...}
+  # where b_i = benchmark
+  # If we have multiple benchmarks that means there were multiple experiments.
+  # so, we need to summarize.
+  for(benchName in names(benchmark.list.out)) {
+    benchmark.list.out[[benchName]] = 
+      summarize.benchmark.list(benchmark.list.out[[benchName]])
   }
-  return(benchmark.list)
+  return(benchmark.list.out)
 }
 
-bias.benchmark.asymptotics <- function(p=10, niters=300, nsamples=10) {
-  # 0. Define algorithms, basic setup.
-  algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
-  e = normal.experiment(niters=niters, p=p)
-
-  # 1. Post-processing functions (aggregation)
-  dist = function(theta, t) vector.dist(theta, e$theta.star)
-  process.params = list(vapply=T, theta.fn=dist)
+benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
+                                   max.lr.scale=3.5, nlr.scales=2) {
+  #  1. Define processParams.
+  var.processParams = list(name="variance-asymp", vapply=F)
+  bias.processParams = list(name="bias-asymp", vapply=T)
   
-  # 2. Run the algorithms. Get a benchmark object.
-  benchmark = generic.benchmark(algos=algos, 
-                                experiment=e,
-                                nsamples=nsamples,
-                                process.params=process.params)
-  # 3. Plot low/high curves.
-  draw = list(x=1:e$niters, logY=T, logX=F,
-              main="Bias asymptotics", xlab="Iterations", ylab="|| bias ||")
-  benchmark$draw = draw
-  save.benchmark(description="bias-asymp", benchmark)
-  return(benchmark)
-}
-
-bias.benchmark.learningRate <- function(p=10, niters=300, nsamples=10, nalphas=10) {
-  algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
-  experiment.list = list()
+  # 2. Define experiments
   base.experiment = normal.experiment(niters=niters, p=p)
-  nsamples = nsamples
-  dist = function(theta, t) vector.dist(theta, base.experiment$theta.star)
-  process.params = list(vapply=T, theta.fn=dist)
+  mulOutParams.list = list()
   
-  # 1. Different learning rates to check.
-  alpha.values = seq(0.01, 2.5, length.out=nalphas)
+  # 2. Different learning rates to check.
+  alpha.values = seq(0.01, max.lr.scale, length.out=nlr.scales)
   for(i in 1:length(alpha.values)) {
     kCurrentLogLevel <<- 0
-    experiment.list[[i]] = normal.experiment(niters=niters, p=p,
-                                             lr.scale=force(alpha.values[i]))
-    loginfo(sprintf("Learning rate at 10 for alpha=%d is %.4f",
-                    i, experiment.list[[i]]$learning.rate(10)))
+    experiment = normal.experiment(niters=niters, p=p,
+                                   lr.scale=alpha.values[i])
+    
+    loginfo(sprintf("Learning rate at 10 for alpha=%.2f is %.4f",
+                    alpha.values[i], experiment$learning.rate(10)))
+    mulOutParams.list[[i]] = list(experiment=experiment,
+                                  nsamples=nsamples,
+                                  algos=c(kSGD, kIMPLICIT))
   }
-
+  # 2b. Checking to see everything is fine w/learning rates.
   for(alpha.i in 1:length(alpha.values)) {
     kCurrentLogLevel <<- 0
     sample.t = sample(1:niters, 1)
-    lr = experiment.list[[alpha.i]]$learning.rate(sample.t)  # learning-rate
+    lr = mulOutParams.list[[alpha.i]]$experiment$learning.rate(sample.t)  # learning-rate
     lr.shouldBe = base.experiment$learning.rate(sample.t) * alpha.values[alpha.i]
     
     CHECK_NEAR(lr, lr.shouldBe, msg="Check if learning rates are set correctly")
   }
-
-  # 2. Run all benchmarks. Get a LIST of benchmarks.
-  # b1 = generic.benchmark(algos, experiment.list[[1]], nsamples=nsamples, process.params)
-  benchmark.list = generic.benchmark.many(algos, experiment.list, nsamples, process.params)
-  CHECK_EQ(length(experiment.list), length(alpha.values))
- 
-  ## 3. Populate return object.
-  data.lohi = list()
-
-  for(algoName in algos) {
-    data.lohi[[algoName]]$low = sapply(1:length(experiment.list),
-                                       function(i) {
-                                         min(benchmark.algo.low(benchmark.list[[i]],
-                                                                algoName))
-                                       })
-    data.lohi[[algoName]]$high = sapply(1:length(experiment.list),
-                                        function(i) {
-                                          max(benchmark.algo.high(benchmark.list[[i]],
-                                                                  algoName))
-                                        })
+  
+  var.processParams = list(name="variance-asymp", vapply=F)
+  bias.processParams = list(name="bias.processParams", vapply=T)
+  
+  # 3. Define input for run.generic.benchmarks()
+  # mulOutParams.list already defined.
+  processParams.list = list(bias.processParams, var.processParams)
+  
+  # 3. Run the algorithms. Get a MultipleOnlineOutput object.
+  benchmark.list = run.benchmarks(mulOutParams.list, processParams.list)
+  
+  # 4. (OPTIONAL) Define draw params -- can be changed later.
+  draw = list(x=alpha.values, logY=F, logX=F,
+              main="Variance asymptotics", xlab="alpha", ylab="|| Covariance ||")
+  # 4. Add draw parameters and save
+  for(benchmarkName in names(benchmark.list)) {
+    benchmark = benchmark.list[[benchmarkName]]
+    # Draw params for bias.
+    if(length(grep("bias", benchmarkName)) > 0) {
+      draw$logY = T
+      draw$ylab = "|| bias ||"
+    }
+    benchmark$draw = draw
+    # 5. Save the benchmark file.
+    save.benchmark(description=benchmarkName, benchmark) 
   }
-  
-  # 4. Define draw parameters.
-  draw = list(x=alpha.values, logY=T, logX=F,
-              main="Bias learning rate", xlab="alpha", ylab="|| bias ||")
-  
-  # 5. Save the benchmark file.
-  # CAUTION: Should use the mulOut object.
-  benchmark = list(mulOut=benchmark.list[[1]]$mulOut,
-                   lowHigh=data.lohi,
-                   experiment=base.experiment,
-                   draw=draw)
-  
-  save.benchmark(description="bias-lr", benchmark)
-  return(benchmark)
 }
 
-
-limit.variance <- function(experiment) {
-  J = experiment$J
-  a = experiment$learning.rate(10^9) * 10^9
-  if(a > 100) stop("There is a problem most likely")
-  I = diag(experiment$p)
-  return(a^2 * solve(2 * a * J - I) %*% J)
-}
-
-variance.benchmark.asymptotics <- function(p=10, niters=300, nsamples=10) {
+benchmark.asymptotics <- function(niters=100, p=100, nsamples=10) {
+  
+  mulOutParams = list(algos = c(kSGD, kIMPLICIT),
+                      experiment = normal.experiment(niters=niters, p=p),
+                      nsamples = nsamples)
+  
   # 0. Define algorithms, basic setup.
-  kCurrentLogLevel <<- 0
-  algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
-  experiment = normal.experiment(niters=niters, p=p)
-  # TODO(ptoulis)
-  # Make this into a function.
-  
+  CHECK_mulOutParams(mulOutParams)
+  experiment = mulOutParams$experiment
   Sigma.theoretical = limit.variance(experiment)
+  
   CHECK_TRUE(all(eigen(Sigma.theoretical)$values >= 0))
-  # 1. Post-processing functions (aggregation)
   
-  dist = function(theta.matrix, t) {
-    maxT = experiment$niters
-    CHECK_EQ(maxT, niters)
-    CHECK_EQ(nrow(theta.matrix), experiment$p)
-    CHECK_EQ(ncol(theta.matrix), nsamples)
-    C = cov(t(theta.matrix))
-    matrix.dist(t * C, Sigma.theoretical)
-  }
-  process.params = list(vapply=F, theta.fn=dist)
+  # Define processParams.
+  var.processParams = list(name="variance-asymp", vapply=F)
+  bias.processParams = list(name="bias-asymp", vapply=T)
   
-  # 2. Run the algorithms. Get a MultipleOnlineOutput object.
-  benchmark = generic.benchmark(algos=algos, 
-                                experiment=experiment,
-                                nsamples=nsamples,
-                                process.params=process.params)
-  # 3. Plot low/high curves.
+  # 2. Define input for run.generic.benchmarks()
+  mulOutParams.list = list(mulOutParams)  # the experiments to run
+  processParams.list = list(bias.processParams, var.processParams)
+  
+  # 3. Run the algorithms. Get a MultipleOnlineOutput object.
+  benchmark.list = run.benchmarks(mulOutParams.list, processParams.list)
+  
+  # 4. (OPTIONAL) Define draw params -- can be changed later.
   draw = list(x=1:experiment$niters, logY=F, logX=F,
               main="Variance asymptotics", xlab="Iterations", ylab="|| Covariance ||")
-  benchmark$draw = draw
-  # 5. Save the benchmark file.
-  save.benchmark(description="variance-asymp", benchmark)
-  
-  return(benchmark)
-}
-
-variance.benchmark.learningRate <- function() {
-  algos = c("sgd.onlineAlgorithm", "implicit.onlineAlgorithm")
-  base.experiment = normal.experiment(niters=400, p=5)
-  nsamples = 50
- 
-  dist = function(theta.matrix, shouldBe.matrix, t) {
-    maxT = e$niters
-    CHECK_EQ(nrow(theta.matrix), e$p)
-    CHECK_EQ(ncol(theta.matrix), nsamples)
-    C = cov(t(theta.matrix))
-    matrix.dist(t * C, shouldBe.matrix)
+  # 4. Add draw parameters and save
+  for(benchmarkName in names(benchmark.list)) {
+    benchmark = benchmark.list[[benchmarkName]]
+    # Draw params for bias.
+    if(length(grep("bias", benchmarkName)) > 0) {
+      draw$logY = T
+      draw$ylab = "|| bias ||"
+    }
+    benchmark$draw = draw
+    # 5. Save the benchmark file.
+    save.benchmark(description=benchmarkName, benchmark) 
   }
-  
-  # 1. Different learning rates to check.
-  alpha.values = seq(0.01, 10, length.out=20)
-  benchmark = list()
-  
-  for(i in 1:length(alpha.values)) {
-    e = base.experiment
-    alpha = alpha.values[i]
-    e$learning.rate <- function(t) alpha * base.experiment$learning.rate(t)
-    I = diag(e$p)
-    A = alpha^2 * solve(2 * alpha * e$Vx - I) %*% e$Vx
-    
-    fn = function(theta.matrix, t) dist(theta.matrix, A, t)
-    process.params = list(vapply=T, theta.fn=fn)
-    
-    tmp.bench = generic.benchmark(algos=algos, 
-                                  experiment=e,
-                                  nsamples=nsamples,
-                                  process.params=process.params)
-    
-    
-  }
-  
-  # 4. Define draw parameters.
-  draw = list(x=alpha.values, logY=T, logX=F,
-              main="Bias learning rate", xlab="alpha", ylab="|| bias ||")
-  
-  # 5. Plot low/high curves.
-  plot.low.high(benchmark, base.experiment, draw)
 }
 
 

@@ -11,10 +11,10 @@ kIMPLICIT = "implicit.onlineAlgorithm"
 
 # Assume we have a parametric statistical model with a p x 1 parameter "theta"
 #
-# Define DATAPOINT to be a list(xt, yt) where xt = px1 vector, yt=1dim value
+# ----  Define DATAPOINT to be a list(xt, yt) where xt = px1 vector, yt=1dim value
 # Then a DATASET is a list (X, Y) where X=(niters x p) and Y = niters x 1
 #
-# Create an EXPERIMENT (stochastic approximation). This is comprised by 
+# ----  Create an EXPERIMENT (stochastic approximation). This is comprised by 
 #   "theta.star" = # (px1) vector of real values, 
 #    p = length(theta.star) = #parameters. That is a terrible name..
 #   niters = (#iterations), 
@@ -24,7 +24,7 @@ kIMPLICIT = "implicit.onlineAlgorithm"
 #   Vx = covariance matrix of xt (covariates/features)
 #   Sigma = theoretical covariance matrix for t θt  , t -> infty
 #
-# An OnlineAlgorithm is defined by a function that accepts 
+# ----  An OnlineAlgorithm is defined by a function that accepts 
 #   t = no. of iteration
 #   onlineOutput = current OnlineOutput object.
 #   data.history  = DATASET object from 1:t
@@ -34,12 +34,12 @@ kIMPLICIT = "implicit.onlineAlgorithm"
 # to create a new estimate. Usually, it will only need xt, yt, θt, 
 # i.e. only the data + estimate at the previous time point.
 #
-# The online algorithm returns an OnlineOutput object:
+# ----  The online algorithm returns an OnlineOutput object:
 #   estimates = (p  x niters) matrix of estimate i.e. (theta_t)
 #   last = last vector of estimates
 #
 # Assume that we run the online algorithm for a specific experiment, k times.
-# A MultipleOnlineOutput object is the result of run.online.algorithm.many()
+# ----  A MultipleOnlineOutput object is the result of run.online.algorithm.many()
 # and it is *not* a LIST of OnlineOutput objects. Rather it is a list
 # with the following dimensions:
 #
@@ -47,18 +47,32 @@ kIMPLICIT = "implicit.onlineAlgorithm"
 # This holds the output like
 #   out[[sgd.onlineAlgorithm]][[t]] = matrix(p x nsamples)
 # has all the samples of θt    (nsamples)
+#
+# ----  A MultipleOnlineOutputParams object (mulOutParams) defines all arguments
+# to run many samples run.online.algorithm:
+# i.e. it is 
+#   {experiment, nsamples, algos}
 # 
-# A BENCHMARK is a LIST object {mulOut, lowHigh, experiment}:
+# ----  A BENCHMARK is a LIST object {mulOut, lowHigh, experiment}:
 #   mulOut = MultipleOnlineOutput object (all data)
 #   lowHigh = LIST{algoName}{low/high} = [] vector of values
 #   experiment = EXPERIMENT that generated the data
 #   draw = OPTIONAL draw params
 #
-# This is the output of generic.benchmark(). 
+# ----  A processParams object defines the data transformation to multipleOnlineOutput.
+#   It is a list {vapply, theta.fn} where vapply = {T,F} defines whether
+#   we are transforming vectors of theta_t or F if we transform the entire 
+#   matrix of theta_t samples.
+#   NEW: theta.t.fn is disabled. We made the following hard-coding
+#       if vapply = T then theta.fn = default.bias.dist()
+#            ""   = F then theta.fn = default.var.dist()
+#
+# ----  An object BenchmarkParams defines what we need to create a BENCHMARK i.e, 
+#   LIST{name, mulOutParams, processParams}
+#
+# ----  This is the output of generic.benchmark(). 
 # A MultipleBenchmark is a LIST of BENCHMARK objects.
 # 
-# A BenchmarkFile is a LIST with {BENCHMARK, EXPERIMENT, DRAW}
-# This is used to save intermediate results in file.
 
 get.dataset.point <- function(dataset, t) {
   CHECK_TRUE(nrow(dataset$X) >= t && nrow(dataset$Y) >= t)
@@ -108,11 +122,25 @@ CHECK_multipleOnlineOutput <- function(mu.out, experiment) {
   CHECK_EQ(nrow(mu.out[[random.i]]), experiment$p)
 }
 
-mul.OnlineOutput.vapply <- function(experiment,
-                                   mul.out,
-                                   algo,
-                                   theta.t.fn,
-                                   summary.fn) {
+default.var.dist = function(experiment, nsamples) {
+  force(experiment)
+  Sigma.theoretical = limit.variance(experiment)
+  
+  dist.fn <- function(theta.matrix, t) {
+    CHECK_EQ(nrow(theta.matrix), experiment$p)
+    CHECK_EQ(ncol(theta.matrix), nsamples)
+    C = cov(t(theta.matrix))
+    matrix.dist(t * C, Sigma.theoretical)
+  }
+}
+
+default.bias.dist <- function(experiment) {
+  dist.fn <- function(theta, t) {
+    return(vector.dist(experiment$theta.star, theta))
+  }
+}
+
+mul.OnlineOutput.vapply <- function(mul.out, experiment, algo, theta.t.fn, summary.fn) {
   # Applies a function to a MultipleOnlineOutput object.
   #
   # Returns a vector V = (niters x 1) vector of values where
@@ -137,10 +165,7 @@ mul.OnlineOutput.vapply <- function(experiment,
   })
 }
 
-mul.OnlineOutput.mapply <- function(experiment,
-                                    mul.out,
-                                    algo,
-                                    fn) {
+mul.OnlineOutput.mapply <- function(mul.out, experiment, algo, fn) {
   # Applies a function to a MultipleOnlineOutput object.
   # 
   # Args:
@@ -199,7 +224,7 @@ benchmark.algo.high <- function(benchmark, algoName) {
 
 
 CHECK_benchmark <- function(benchmark) {
-  CHECK_MEMBER(names(benchmark), c("mulOut", "lowHigh", "experiment", "draw"))
+  CHECK_MEMBER(names(benchmark), c("mulOut", "lowHigh", "experiment", "draw", "name"))
   CHECK_MEMBER(names(benchmark$lowHigh), kImplementedOnlineAlgorithms)
   CHECK_multipleOnlineOutput(benchmark$mulOut, experiment=benchmark$experiment)
   
@@ -227,6 +252,18 @@ CHECK_benchmark <- function(benchmark) {
   }
 }
 
+# CHECKS for definition of *params objects.
+CHECK_processParams <- function(procParams) {
+  CHECK_MEMBER(names(procParams), c("vapply", "name"))
+  CHECK_TRUE(is.logical(procParams$vapply))
+}
+
+CHECK_mulOutParams <- function(moutParams) {
+  CHECK_MEMBER(names(moutParams), c("algos", "experiment", "nsamples"))
+  CHECK_experiment(moutParams$experiment)
+  CHECK_MEMBER(moutParams$algos, kImplementedOnlineAlgorithms)
+  CHECK_numeric(moutParams$nsamples)
+}
 
 CHECK_dataset <- function(dataset) {
   CHECK_SETEQ(names(dataset), c("X", "Y"))
