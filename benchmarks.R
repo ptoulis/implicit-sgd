@@ -188,20 +188,19 @@ summarize.benchmark.list <- function(benchmark.list) {
 
 # CORE functionality of benchmarks.R
 execute.benchmarks <- function(mulOutParams.list, processParams.list) {
-  # Runs a generic benchmark. The idea is the following:
-  #   1) Define the algorithms to be tested
-  #   2) Define the experiment (sample.dataset, score function, learning rate)
-  #   3) Get #nsamples for each experiment
-  #   4) For each sample use process.params to process the output.
-  #
   # Returns a LIST of BENCHMARK objects 
   #
   # Args:
-  #   A LIST of benchmarkParams object (see terminology)
+  #   mulOutParams.list = LIST of MultipleOnlineParams object
+  #     This defines the different experiments to run (e.g. possibly diferent learning rates)
+  #   processParams.list = LIST of processParams
+  #     Each one essentially defines a bias or variance distance.
+  #     A bit unecessary because for each run.benchmark.* function
+  #     we are using the same list of processParams. However, the names of 
+  #     the benchmarks are obtained from the "name" field in that list.
   #
-  # Returns a LIST of BENCHMARK objects, one for each benchmarkParams argument.
+  # Returns a LIST of BENCHMARK objects, one for each processParams.list argument.
   #
-  # Object to be returned.
   benchmark.list.out = list()
   
   # Object to hold the multiple online output
