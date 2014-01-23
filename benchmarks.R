@@ -7,13 +7,6 @@
 source("online-algorithms.R")
 library(scales)
 
-limit.variance <- function(experiment) {
-  J = experiment$J
-  a = experiment$learning.rate(10^9) * 10^9
-  if(a > 10^6) stop("There is a problem most likely")
-  I = diag(experiment$p)
-  return(a^2 * solve(2 * a * J - I) %*% J)
-}
 
 get.out.folder <- function() {
   # The "out" folder is where we save Rdata (benchmarks raw data)
@@ -36,7 +29,7 @@ get.benchmark.filename <- function(prefix, benchmark, ext) {
   return(filename)
 }
 
-plot.all.benchmarks <- function() {
+plot.all.benchmarks <- function(max.nPoints) {
   # Goes through all the Rdata files, and then plots the BENCHMARK object
   # for each one of them
   #
@@ -45,7 +38,7 @@ plot.all.benchmarks <- function() {
   kCurrentLogLevel <<- 0
   for(file in rdata.files) {
     loginfo(sprintf("Loading benchmark %s for plotting. Please wait..", file))
-    plot.benchmark(file, T)
+    plot.benchmark(file, max.nPoints=max.nPoints, toPng=T)
     loginfo("Done.")
   }
 }
@@ -62,7 +55,9 @@ matrix.dist <- function(m1, m2) {
   norm(m1-m2, "F") / sqrt(nrow(m1) * ncol(m1))
 }
 
-plot.benchmark <- function(benchmarkObjectORFile, toPng=F) {
+plot.benchmark <- function(benchmarkObjectORFile,
+                           max.nPoints=10,
+                           toPng=F) {
   # Will plot the low-high values of the benchmark
   # according to the drawing parameters in "draw"
   #
@@ -112,6 +107,9 @@ plot.benchmark <- function(benchmarkObjectORFile, toPng=F) {
                                     benchmark=benchmark, ext="png"))
   }
   
+  kTooMuch = max.nPoints
+  tooMuchData = length(x) >= kTooMuch
+  
   for(i in 1:length(algos)) {
     algoName = algos[i]
     ymin = benchmark.algo.low(benchmark, algoName)
@@ -127,16 +125,28 @@ plot.benchmark <- function(benchmarkObjectORFile, toPng=F) {
     if(is.element("ylims", names(draw)))
       ylims = draw$ylims
     
-  
+    # If too many stuff to print
+    if(tooMuchData) {
+      ind = as.integer(seq(1, length(x), length.out=kTooMuch))
+      x = x[ind]
+      ymax = ymax[ind]
+      ymin = ymin[ind]
+    }
+    print(ylab)
     if(i==1) {
       plot(x, ymax, main=title, 
            xlab=xlab,
            ylab=ylab,
-           type="l",
            col="white",
            ylim=ylims)
-      legend(0.6 * niters, 0.8 * max(ylims), col=cols, legend=algos, lty=1:length(algos))
+      algoNames =sapply(algos, function(i) kAlgoHumanNames(i))
+      legend(0.6 * niters, 0.8 * max(ylims), col=cols, lty=rep(1, length(algos)),
+             pch=4 * 1:length(algos),
+             legend=algoNames)
     }
+    points(x, ymax, pch= 4 * i)
+    points(x, ymin, pch= 4 * i)
+    
     polygon(c(x, rev(x)), c(ymin, rev(ymax)), col=alpha(cols[i], 0.2), lty=i)
   }
   if(toPng)
@@ -332,7 +342,7 @@ run.benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
     # Draw params for bias.
     if(length(grep("bias", benchmarkName)) > 0) {
       draw$logY = T
-      draw$ylab = "|| bias ||"
+      draw$ylab = "log || bias ||"
       draw$main = "Bias/Learning rate (lr)"
     }
     benchmark$draw = draw
@@ -375,7 +385,8 @@ run.benchmark.asymptotics <- function(niters=100, p=100, nsamples=10) {
     # Draw params for bias.
     if(length(grep("bias", benchmarkName)) > 0) {
       draw$logY = T
-      draw$ylab = "|| bias ||"
+      draw$ylab = "log || bias ||"
+      draw$main = "Bias asymptotics"
     }
     benchmark$draw = draw
     # 5. Save the benchmark file.

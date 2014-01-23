@@ -69,6 +69,38 @@ get.experiment <- function(name="normal",
   return(e)
 }
 
+limit.variance <- function(experiment) {
+  J = experiment$J
+  limit.a = experiment$learning.rate(10^9) * 10^9
+  if(limit.a > 10^6) stop("There is a problem most likely")
+  I = diag(experiment$p)
+  return(limit.a^2 * solve(2 * limit.a * J - I) %*% J)
+}
+
+best.alpha <- function(max.alpha=2, nalphas=10^3, p=10) {
+  coeffs = seq(0, max.alpha, length.out=nalphas)
+  base.experiment = normal.experiment(p=p, niters=100)
+  print(limit.variance(base.experiment))
+  print(eigen(limit.variance(base.experiment))$values)
+  traces = sapply(coeffs, function(a) {
+    experiment = normal.experiment(niters=100, p=p)
+    experiment$learning.rate = function(t) a * base.experiment$learning.rate(t)
+    sum(diag(limit.variance(experiment)))
+  })
+  plot(coeffs, traces, type="l")       
+  l0 = min(eigen(base.experiment$J)$values)
+  x.critical = 0.5 * l0 / eigen(base.experiment$J)$values
+  abline(v=x.critical, col="red")
+}
+
+covariance.matrix <- function(p) {
+  u1 = seq(0.3, 1.2, length.out=p)
+  u2 = seq(0.2, 1, length.out=p)
+  V =  (diag(u1) + u2 %*% t(u2))
+  CHECK_TRUE(all(eigen(V)$values > 0))
+  V
+}
+
 normal.experiment <- function(niters, p=100, lr.scale=1.0) {
   # Normal experiment (linear regression)
   # Defined in Xu (2011), Section 6.2, p.8
@@ -89,11 +121,7 @@ normal.experiment <- function(niters, p=100, lr.scale=1.0) {
   # experiment$theta.star = matrix(runif(p, min=0, max=5), ncol=1) 
   experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
   experiment$p = p
-  u = rep(0.2, p)
-  A = diag(seq(0.1, 1, length.out=p)) + u %*% t(u)
-  # A = matrix(runif(p^2, min=0, max=1), nrow=p)
-  # A = A %*% t(A)
-  # Set the covariance matrix of the experiment
+  A = covariance.matrix(p)
   experiment$Vx = A
   # 2. Define the sample dataset function.
   experiment$sample.dataset = function() {
@@ -134,12 +162,6 @@ normal.experiment <- function(niters, p=100, lr.scale=1.0) {
     CHECK_TRUE(all(tmp >= 0))
     return(as.numeric(tmp))
   }
-  ## IGNORE
-#   batch.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
-#     fit = lm(Y ~ X, data=data.history)
-#     theta.new = tail(as.numeric(fit$coefficients), experiment$p)
-#     return(theta.new)
-#   }
-  
+
   return(experiment)
 }

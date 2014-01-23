@@ -8,6 +8,13 @@ source("../r-toolkit/logs.R")
 # For convenience.
 kSGD = "sgd.onlineAlgorithm"
 kIMPLICIT = "implicit.onlineAlgorithm"
+kAlgoHumanNames <- function(algo) {
+  if(length(grep("sgd", algo)))
+    return("SGD")
+  else if(length(grep("implicit", algo))) {
+    return("Implicit")
+  }
+}
 
 # Assume we have a parametric statistical model with a p x 1 parameter "theta"
 #
