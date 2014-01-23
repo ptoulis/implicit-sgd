@@ -53,8 +53,10 @@ empty.experiment <- function(niters) {
 }
 
 get.experiment.description <- function(experiment) {
-  return(sprintf(" Experiment %s: iters=%d p=%d", experiment$name, 
-                 experiment$niters, experiment$p))  
+  return(sprintf(" Experiment %s: iters=%d p=%d limit.lr=%.2f",
+                 experiment$name, 
+                 experiment$niters, experiment$p,
+                 experiment$learning.rate(10^9) * 10^9))  
 }
 
 get.experiment <- function(name="normal",
