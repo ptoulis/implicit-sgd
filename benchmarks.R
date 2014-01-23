@@ -10,7 +10,7 @@ library(scales)
 limit.variance <- function(experiment) {
   J = experiment$J
   a = experiment$learning.rate(10^9) * 10^9
-  if(a > 100) stop("There is a problem most likely")
+  if(a > 10^6) stop("There is a problem most likely")
   I = diag(experiment$p)
   return(a^2 * solve(2 * a * J - I) %*% J)
 }
@@ -186,6 +186,22 @@ summarize.benchmark.list <- function(benchmark.list) {
               experiment=b1$experiment))
 }
 
+best.scale <- function() {
+  alpha.values = seq(0.001, 2.5, length.out=100)
+  vars = sapply(alpha.values, function(a) {
+    e = normal.experiment(niters=100, p=10, lr.scale=a)
+    return(sum(diag(limit.variance(e))))
+  })
+  # print(vars)
+  neg = which(vars < 0)
+  vars = vars[-neg]
+  alpha.values = alpha.values[-neg]
+  plot(alpha.values, vars, type="l")
+  i = order(vars)
+  abline(v=alpha.values[i[1]], col="red")
+  return(alpha.values[i])
+}
+
 # CORE functionality of benchmarks.R
 execute.benchmarks <- function(mulOutParams.list, processParams.list) {
   # Returns a LIST of BENCHMARK objects 
@@ -269,7 +285,7 @@ execute.benchmarks <- function(mulOutParams.list, processParams.list) {
 }
 
 run.benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
-                                       max.lr.scale=2.5, nlr.scales=2) {
+                                       max.lr.scale=2.0, nlr.scales=2) {
   #  1. Define processParams.
   var.processParams = list(name="variance-LR", vapply=F)
   bias.processParams = list(name="bias-LR", vapply=T)
