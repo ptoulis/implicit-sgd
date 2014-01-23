@@ -203,13 +203,16 @@ execute.benchmarks <- function(mulOutParams.list, processParams.list) {
   #
   benchmark.list.out = list()
   
+  isLearningRateBenchmark = length(mulOutParams.list) > 1
+  
   # Object to hold the multiple online output
   for(j in 1:length(mulOutParams.list)) {
     params = mulOutParams.list[[j]]
     experiment = params$experiment
     algos = params$algos
     nsamples = params$nsamples
-    print(sprintf("Running new experiment (%d/%d): %s",
+    print(sprintf("LR-benchmarks=%s -- Running new experiment (%d/%d): %s",
+                  isLearningRateBenchmark,
                   j, length(mulOutParams.list),
                   get.experiment.description(experiment)))
     # 1. Run j-th experiment. Obtain multiple online output.
@@ -235,6 +238,13 @@ execute.benchmarks <- function(mulOutParams.list, processParams.list) {
                                                                theta.t.fn, summary.max)
         } else {
           theta.fn <- default.var.dist(experiment, nsamples)
+          if(isLearningRateBenchmark) {
+            print(sprintf("Variance LR benchmark. dist() will be average trace."))
+            theta.fn <- function(theta.matrix, t) {
+              C = t * cov(t(theta.matrix))
+              sum(diag(C)) / nrow(C) # average trace.
+            }
+          }
           data.lohi[[algoName]]$low = mul.OnlineOutput.mapply(mulOut, experiment, algoName, theta.fn)
           data.lohi[[algoName]]$high = mul.OnlineOutput.mapply(mulOut, experiment, algoName, theta.fn)
         }
@@ -259,7 +269,7 @@ execute.benchmarks <- function(mulOutParams.list, processParams.list) {
 }
 
 run.benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
-                                   max.lr.scale=2.5, nlr.scales=2) {
+                                       max.lr.scale=2.5, nlr.scales=2) {
   #  1. Define processParams.
   var.processParams = list(name="variance-LR", vapply=F)
   bias.processParams = list(name="bias-LR", vapply=T)
@@ -356,7 +366,4 @@ run.benchmark.asymptotics <- function(niters=100, p=100, nsamples=10) {
     save.benchmark(description=benchmarkName, benchmark) 
   }
 }
-
-
-
 
