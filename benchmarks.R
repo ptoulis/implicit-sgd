@@ -86,6 +86,7 @@ plot.benchmark <- function(benchmarkObjectORFile,
     experiment = benchmark$experiment
     draw = benchmark$draw
   }
+  
   CHECK_benchmark(benchmark)
   # Done loading
   algos = benchmark.algos(benchmark)  # algorithm names (character)
@@ -109,6 +110,11 @@ plot.benchmark <- function(benchmarkObjectORFile,
   
   kTooMuch = max.nPoints
   tooMuchData = length(x) >= kTooMuch
+  keep.index = NA
+  if(tooMuchData) {
+    keep.index = as.integer(seq(1, length(x), length.out=min(length(x), kTooMuch)))
+    x = x[keep.index]
+  }
   
   for(i in 1:length(algos)) {
     algoName = algos[i]
@@ -118,6 +124,11 @@ plot.benchmark <- function(benchmarkObjectORFile,
       ymin = log(ymin)
       ymax = log(ymax)
     }
+    
+    # Refactor
+    ymin = ymin[keep.index]
+    ymax = ymax[keep.index]
+    
     # Limits in the y-axis
     defaultYlimMin = ifelse(logY, -3, 10^-3)
     defaultYlimMax = ifelse(logY, 3, 10^3)
@@ -140,14 +151,15 @@ plot.benchmark <- function(benchmarkObjectORFile,
            col="white",
            ylim=ylims)
       algoNames =sapply(algos, function(i) kAlgoHumanNames(i))
-      legend(0.6 * niters, 0.8 * max(ylims), col=cols, lty=rep(1, length(algos)),
+      legend(0.6 * niters, 0.8 * max(ylims), col=cols, 
+             lty=1:length(algos),
              pch=4 * 1:length(algos),
              legend=algoNames)
     }
     points(x, ymax, pch= 4 * i)
     points(x, ymin, pch= 4 * i)
     
-    polygon(c(x, rev(x)), c(ymin, rev(ymax)), col=alpha(cols[i], 0.2), lty=i)
+    polygon(c(x, rev(x)), c(ymin, rev(ymax)), col=alpha(cols[i], 0.1), lty=i)
   }
   if(toPng)
     graphics.off()
@@ -251,8 +263,8 @@ execute.benchmarks <- function(mulOutParams.list, processParams.list) {
       processParams = processParams.list[[m]]
       # 2. Process the raw data using the processParams specification.
       data.lohi = list()
-      summary.min = function(x) quantile(x, 0.05)
-      summary.max = function(x) quantile(x, 0.95)
+      summary.min = function(x) quantile(x, 0.025)
+      summary.max = function(x) quantile(x, 0.975)
       for(algoName in algos) {
         if(processParams$vapply) {
           # Hard-coding the transformation function
@@ -295,7 +307,8 @@ execute.benchmarks <- function(mulOutParams.list, processParams.list) {
 }
 
 run.benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
-                                       max.lr.scale=2.0, nlr.scales=2) {
+                                       max.lr.scale=2.0, nlr.scales=2,
+                                       plot.afterDone=F) {
   #  1. Define processParams.
   var.processParams = list(name="variance-LR", vapply=F)
   bias.processParams = list(name="bias-LR", vapply=T)
@@ -335,6 +348,10 @@ run.benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
   benchmark.list = execute.benchmarks(mulOutParams.list, processParams.list)
   
   # 4. (OPTIONAL) Define draw params -- can be changed later.
+  if(plot.afterDone) {
+    par(mfrow=c(length(names(benchmark.list)), 1))
+  }
+  
   for(benchmarkName in names(benchmark.list)) {
     draw = list(x=alpha.values, logY=F, logX=F,
                 main="Variance/Learning rate (lr)", xlab="alpha", ylab="|| Covariance ||")
@@ -347,11 +364,14 @@ run.benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
     }
     benchmark$draw = draw
     # 5. Save the benchmark file.
-    save.benchmark(description=benchmarkName, benchmark) 
+    save.benchmark(description=benchmarkName, benchmark)
+    if(plot.afterDone)
+      plot.benchmark(benchmark)
   }
 }
 
-run.benchmark.asymptotics <- function(niters=100, p=100, nsamples=10) {
+run.benchmark.asymptotics <- function(niters=100, p=100, nsamples=10,
+                                      plot.afterDone=F) {
   
   mulOutParams = list(algos = c(kSGD, kIMPLICIT),
                       experiment = normal.experiment(niters=niters, p=p),
@@ -377,6 +397,10 @@ run.benchmark.asymptotics <- function(niters=100, p=100, nsamples=10) {
   
   # 4. (OPTIONAL) Define draw params -- can be changed later.
   # 4. Add draw parameters and save
+  if(plot.afterDone) {
+    par(mfrow=c(length(names(benchmark.list)), 1))
+  }
+  
   for(benchmarkName in names(benchmark.list)) {
     draw = list(x=1:experiment$niters, logY=F, logX=F,
                 main="Variance asymptotics", xlab="Iterations", ylab="|| Covariance ||")
@@ -390,7 +414,9 @@ run.benchmark.asymptotics <- function(niters=100, p=100, nsamples=10) {
     }
     benchmark$draw = draw
     # 5. Save the benchmark file.
-    save.benchmark(description=benchmarkName, benchmark) 
+    save.benchmark(description=benchmarkName, benchmark)
+    if(plot.afterDone)
+      plot.benchmark(benchmark)
   }
 }
 
