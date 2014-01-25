@@ -94,9 +94,9 @@ best.alpha <- function(max.alpha=2, nalphas=10^3, p=10) {
 }
 
 covariance.matrix <- function(p) {
-  u1 = seq(0.3, 1.2, length.out=p)
+  u1 = 0.5 * seq(-1, 1, length.out=p)
   u2 = seq(0.2, 1, length.out=p)
-  V =  (diag(u1) + u2 %*% t(u2))
+  V =  (diag(u2) + u1 %*% t(u1))
   CHECK_TRUE(all(eigen(V)$values > 0))
   V
 }
