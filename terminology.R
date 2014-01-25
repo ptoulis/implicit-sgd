@@ -8,6 +8,7 @@ source("../r-toolkit/logs.R")
 # For convenience.
 kSGD = "sgd.onlineAlgorithm"
 kIMPLICIT = "implicit.onlineAlgorithm"
+kMainAlgos = c(kSGD, kIMPLICIT)
 kAlgoHumanNames <- function(algo) {
   if(length(grep("sgd", algo)))
     return("SGD")
