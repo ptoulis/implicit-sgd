@@ -103,7 +103,6 @@ covariance.matrix <- function(p) {
 
 normal.experiment <- function(niters, p=100, lr.scale=1.0) {
   # Normal experiment (linear regression)
-  # Defined in Xu (2011), Section 6.2, p.8
   #
   # Assume xt ~ N(0, A)  where A has eigenvalues from 0.01 to 1
   #        yt | xt = xt'θ* + ε ,  where ε ~ N(0, 1) ind.
@@ -165,3 +164,72 @@ normal.experiment <- function(niters, p=100, lr.scale=1.0) {
 
   return(experiment)
 }
+
+poisson.experiment <- function(niters, p=100, lr.scale=1.0) {
+  # Poisson regression
+  #
+  # Assume xt ~ N(0, A)  where A has eigenvalues from 0.01 to 1
+  #        yt | xt = Pois(λ) , log(λ) = xt'θ*
+  #
+  # Thus the score function is equal to
+  #     (yt - exp(xt'θ)) * xt
+  #
+  # Args:
+  #   niters = number of samples (also #iterations for online algorithms)
+  #   p = #parameters (dimension of the problem)
+  #   lr.scale = scale of learning rate
+  # 1. Define θ*
+  experiment = empty.experiment(niters)
+  experiment$name = "poisson"
+  # experiment$theta.star = matrix(runif(p, min=0, max=5), ncol=1) 
+  experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
+  experiment$p = p
+  A = covariance.matrix(p)
+  experiment$Vx = A
+  
+  # Scale because we exponentiate
+  max.rate = 6
+  scale = sqrt(log(max.rate) / (3 * sum(A)))
+  experiment$theta.star = scale * experiment$theta.star
+  
+  # 2. Define the sample dataset function.
+  experiment$sample.dataset = function() {
+    epsilon = matrix(rnorm(niters), ncol=1)
+    X = rmvnorm(niters, mean=rep(0, p), sigma=A)
+    log.lambdas = X %*% experiment$theta.star
+    CHECK_EQ(length(log.lambdas), niters)
+    Y = matrix(rpois(niters, lambda=exp(log.lambdas)), ncol=1)
+    CHECK_TRUE(nrow(X) == niters)
+    return(list(X=X, Y=Y))
+  }
+  
+  gamma0 = 1 / sum(diag(A))
+  lambda0 = min(eigen(A)$values)
+  # 3. Define the score function
+  experiment$score.function = function(theta, datapoint) {
+    glm.score.function(h.transfer=exp, theta, datapoint)
+  }
+  
+  # 4. Define the learning rate
+  experiment$learning.rate <- function(t) {
+    # stop("Need to define learning rate per-application.")
+    lr.scale * base.learning.rate(t, gamma0=gamma0, alpha=lambda0, c=1)
+  }
+  
+  # 4b. Fisher information
+  experiment$J = A
+  
+  # 5. Define the risk . This is usually the negative log-likelihood
+  truth = experiment$theta.star
+  experiment$risk <- function(theta) {
+    CHECK_EQ(length(theta), length(truth))
+    tmp = 0.5 * t(theta - truth) %*% A %*% (theta - truth)
+    CHECK_EQ(nrow(tmp), 1)
+    CHECK_EQ(ncol(tmp), 1)
+    CHECK_TRUE(all(tmp >= 0))
+    return(as.numeric(tmp))
+  }
+  
+  return(experiment)
+}
+
