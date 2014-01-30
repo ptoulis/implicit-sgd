@@ -144,7 +144,11 @@ implicit.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
     u  - at * get.score.coeff(theta.old + u * xt)
   }
   # 2. Solve implicit equation
-  xit = uniroot(implicit.fn, interval=Bt)$root
+  xit = NA
+  if(Bt[2] != Bt[1])
+    xit = uniroot(implicit.fn, interval=Bt)$root
+  else 
+    xit = Bt[1]
   theta.new = theta.old + xit * xt
   return(theta.new)
 }
