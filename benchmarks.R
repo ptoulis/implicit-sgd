@@ -306,7 +306,8 @@ execute.benchmarks <- function(mulOutParams.list, processParams.list) {
   return(benchmark.list.out)
 }
 
-run.benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
+run.benchmark.learningRate <- function(base.experiment,
+                                       nsamples=10,
                                        max.lr.scale=2.0, nlr.scales=2,
                                        plot.afterDone=F) {
   #  1. Define processParams.
@@ -314,7 +315,8 @@ run.benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
   bias.processParams = list(name="bias-LR", vapply=T)
   
   # 2. Define experiments
-  base.experiment = normal.experiment(niters=niters, p=p)
+  niters = base.experiment$niters
+  p = base.experiment$p
   mulOutParams.list = list()
   
   # 2. Different learning rates to check.
@@ -370,11 +372,11 @@ run.benchmark.learningRate <- function(niters=100, p=100, nsamples=10,
   }
 }
 
-run.benchmark.asymptotics <- function(niters=100, p=100, nsamples=10,
+run.benchmark.asymptotics <- function(experiment, nsamples=10,
                                       plot.afterDone=F) {
   
   mulOutParams = list(algos = c(kSGD, kIMPLICIT),
-                      experiment = normal.experiment(niters=niters, p=p),
+                      experiment = experiment,
                       nsamples = nsamples)
   
   # 0. Define algorithms, basic setup.
