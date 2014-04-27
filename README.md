@@ -73,14 +73,14 @@ To clarify, we use the terms as follows:
    X = (niters x p) and Y = (niters x 1).
 
 * An ```EXPERIMENT``` is a list comprised by 
-   * _theta.star_ =  (p x 1) vector of real values, 
-    * _p_ = length(```theta.star```) = #parameters. (that is a terrible name..)
-    * _niters_ = #iterations in the experiment
-    * _sample.dataset()_ = samples ```DATASET``` object
-    * _score.function()_ = \nabla loglik(theta, data_t) = score function
-    * _learning.rate()_ = function (t, ...) = gives the learning rate at t > 0
-    * _Vx_ = covariance matrix of xt (covariates/features) i.e. Vx = Cov(xt)
-    * _Sigma_ = theoretical covariance matrix for t of θt  , t -> infty
+   * **theta.star** =  (p x 1) vector of real values, 
+    * **p** = length(```theta.star```) = #parameters. (that is a terrible name..)
+    * **niters** = #iterations in the experiment
+    * **sample.dataset()** = samples ```DATASET``` object
+    * **score.function()** = \nabla loglik(theta, data_t) = score function
+    * **learning.rate()** = function (t, ...) = gives the learning rate at t > 0
+    * **Vx** = covariance matrix of xt (covariates/features) i.e. Vx = Cov(xt)
+    * **Sigma** = theoretical covariance matrix for t of θt  , t -> infty
 
 * An ```OnlineAlgorithm``` is a function with the following arguments 
    * _t_ = no. of iteration
