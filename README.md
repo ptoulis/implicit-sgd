@@ -4,9 +4,9 @@ implicit-glms
 Fitting large-scale Generalized Linear Models (GLMs) with implicit updates.
 
 Assume we have a model that produces observations 
-    
+```
     y_t  ~  f(theta*)
-   
+```   
 for t=1,2...  theta* = parameter vector in R^p
 and y_t are one-dimensional observations, indexed by t.
 
@@ -19,7 +19,7 @@ where S'(.) is the Fisher score function (gradient of log-likelihood).
 
 The implicit method is a simple twist in (1) as
 
-  theta_t = theta_{t-1} + a_t * S'(yt; theta_t)     (2)
+    theta_t = theta_{t-1} + a_t * S'(yt; theta_t)     (2)
   
 where the Fisher score is evaluated in the future iterate.
 
