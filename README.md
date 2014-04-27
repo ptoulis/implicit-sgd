@@ -73,20 +73,20 @@ To clarify, we use the terms as follows:
    X = (niters x p) and Y = (niters x 1).
 
 * An ```EXPERIMENT``` is a list comprised by 
-   * ```theta.star``` =  (p x 1) vector of real values, 
-    * ```p``` = length(```theta.star```) = #parameters. (that is a terrible name..)
-    * ```niters``` = #iterations in the experiment
-    * ```sample.dataset()``` = samples ```DATASET``` object
-    * ```score.function()``` = \nabla loglik(theta, data_t) = score function
-    * ```learning.rate``` = function (t, ...) = gives the learning rate at t > 0
-    * ```Vx``` = covariance matrix of xt (covariates/features) i.e. Vx = Cov(xt)
-    * ```Sigma``` = theoretical covariance matrix for t of θt  , t -> infty
+   * _theta.star_ =  (p x 1) vector of real values, 
+    * _p_ = length(```theta.star```) = #parameters. (that is a terrible name..)
+    * _niters_ = #iterations in the experiment
+    * _sample.dataset()_ = samples ```DATASET``` object
+    * _score.function()_ = \nabla loglik(theta, data_t) = score function
+    * _learning.rate()_ = function (t, ...) = gives the learning rate at t > 0
+    * _Vx_ = covariance matrix of xt (covariates/features) i.e. Vx = Cov(xt)
+    * _Sigma_ = theoretical covariance matrix for t of θt  , t -> infty
 
 * An ```OnlineAlgorithm``` is a function with the following arguments 
-   * ```t``` = no. of iteration
-   * ```onlineOutput``` = current ```OnlineOutput``` object.
-   * ```data.history```  = ```DATASET``` object from 1:t.
-   * ```experiment``` = EXPERIMENT object, has learning ratescore function
+   * _t_ = no. of iteration
+   * _onlineOutput_ = current ```OnlineOutput``` object.
+   * _data.history_  = ```DATASET``` object from 1:t.
+   * _experiment_ = EXPERIMENT object, has learning ratescore function
 
  The idea is that the algorithm will use the data up to t, and the current estimates
  to create a new estimate. Usually, it will only need xt, yt, θt, 
@@ -94,8 +94,8 @@ To clarify, we use the terms as follows:
 
 * The ```OnlineOutput``` is the output of an ```OnlineAlgorithm```.
   This is comprised by
-    * ```estimates``` = (p  x niters) matrix of estimate i.e. (theta_t)
-    * ```last``` = last vector of estimates (length p)
+    * _estimates_ = (p  x niters) matrix of estimate i.e. (theta_t)
+    * _last_ = last vector of estimates (length p)
 
  Assume that we run the online algorithm for a specific experiment, k times.
 
@@ -110,10 +110,10 @@ To clarify, we use the terms as follows:
  i.e. it is a ```LIST{experiment, nsamples, algos}```.
  
 * A ```BENCHMARK``` is a ```LIST{mulOut, lowHigh, experiment}``` where 
-    * mulOut = ```MultipleOnlineOutput``` object (all data)
-    * lowHigh = ```LIST{algoName}{lowhigh}``` = [] vector of values
-    * experiment = ```EXPERIMENT``` that generated the data
-    * draw = OPTIONAL drawing params
+    * _mulOut_ = ```MultipleOnlineOutput``` object (all data)
+    * _lowHigh_ = ```LIST{algoName}{lowhigh}``` = [] vector of values
+    * _experiment_ = ```EXPERIMENT``` that generated the data
+    * _draw_ = OPTIONAL drawing params
 
 * A ```processParams``` object defines the data transformation to ```multipleOnlineOutput```.
    It is a ```LIST{vapply, theta.fn}``` where vapply = {T,F} defines whether
