@@ -77,10 +77,10 @@ To clarify, we use the terms as follows:
     * **p** = length(```theta.star```) = #parameters. (that is a terrible name..)
     * **niters** = #iterations in the experiment
     * **sample.dataset()** = samples ```DATASET``` object
-    * **score.function()** = \nabla loglik(theta, data_t) = score function
+    * **score.function()** = \nabla loglik(theta, data_t) = px1 vector
     * **learning.rate()** = function (t, ...) = gives the learning rate at t > 0
     * **Vx** = covariance matrix of xt (covariates/features) i.e. Vx = Cov(xt)
-    * **Sigma** = theoretical covariance matrix for t of θt  , t -> infty
+    * **J** = Fisher information = E(h'(θ'x) x x')
 
 * An ```OnlineAlgorithm``` is a function with the following arguments 
    * **t** = no. of iteration
