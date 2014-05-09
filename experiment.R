@@ -96,7 +96,9 @@ best.alpha <- function(max.alpha=2, nalphas=10^3, p=10) {
 covariance.matrix <- function(p) {
   u1 = 0.5 * seq(-1, 1, length.out=p)
   u2 = seq(0.2, 1, length.out=p)
-  V =  (diag(u2) + u1 %*% t(u1))
+  C = matrix(0, nrow=p, ncol=p)
+  diag(C) <- u2
+  V =  (C + u1 %*% t(u1))
   CHECK_TRUE(all(eigen(V)$values > 0))
   V
 }
@@ -165,7 +167,15 @@ normal.experiment <- function(niters, p=100, lr.scale=1.0) {
   return(experiment)
 }
 
-poisson.experiment <- function(niters, p=100, lr.scale=1.0) {
+sparse.sample <- function(nsamples, nsize) {
+  ## Will sample n elements from 0 to (n-1) such that 
+  ## P(X=i) ~ 1 / (1+i)   marginally
+  # Creates some pseudo-sparsity.
+  s = seq(0, nsize-1)
+  return(sample(s, size=nsamples, replace=T, prob=(1+s)^-1))
+}
+
+poisson.experiment <- function(niters, p=100, max.rate=5, lr.scale=1.0) {
   # Poisson regression
   #
   # Assume xt ~ N(0, A)  where A has eigenvalues from 0.01 to 1
@@ -181,28 +191,39 @@ poisson.experiment <- function(niters, p=100, lr.scale=1.0) {
   # 1. Define θ*
   experiment = empty.experiment(niters)
   experiment$name = "poisson"
-  # experiment$theta.star = matrix(runif(p, min=0, max=5), ncol=1) 
-  experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
+  experiment$theta.star = matrix(sparse.sample(p, as.integer(sqrt(p))), ncol=1)  # all 1's
   experiment$p = p
-  A = covariance.matrix(p)
-  experiment$Vx = A
   
-  # Scale because we exponentiate
-  max.rate = 6
-  scale = sqrt(log(max.rate) / (3 * sum(A)))
-  experiment$theta.star = scale * experiment$theta.star
+  sample.X <- function(n) {
+    X = matrix(sparse.sample(n * p, nsize=4), nrow=n, ncol=p)
+    return(X)
+  }
+  
+  ## 1b Set Covariance of X
+  X.sample = sample.X(1000)
+
+  ## 2a. Set the maximum rate
+  #
+  # We will sample ~ X but will scale it down to achieve the specified max rate.
+  rates = exp(X.sample %*% experiment$theta.star)
+  if(is.infinite(max(rates))) {
+    warning("Possible numerical instability. Max rate = infinity")
+  }
+  experiment$scale = log(max.rate) / log(max(rates))
+  experiment$theta.star = experiment$scale * experiment$theta.star
+  experiment$Vx = cov(X.sample)
   
   # 2. Define the sample dataset function.
   experiment$sample.dataset = function() {
     epsilon = matrix(rnorm(niters), ncol=1)
-    X = rmvnorm(niters, mean=rep(0, p), sigma=A)
+    X = sample.X(niters)
     log.lambdas = X %*% experiment$theta.star
     CHECK_EQ(length(log.lambdas), niters)
     Y = matrix(rpois(niters, lambda=exp(log.lambdas)), ncol=1)
     CHECK_TRUE(nrow(X) == niters)
     return(list(X=X, Y=Y))
   }
-  
+  A = experiment$Vx
   gamma0 = 1 / sum(diag(A))
   lambda0 = min(eigen(A)$values)
   # 3. Define the score function
@@ -222,12 +243,7 @@ poisson.experiment <- function(niters, p=100, lr.scale=1.0) {
   # 5. Define the risk . This is usually the negative log-likelihood
   truth = experiment$theta.star
   experiment$risk <- function(theta) {
-    CHECK_EQ(length(theta), length(truth))
-    tmp = 0.5 * t(theta - truth) %*% A %*% (theta - truth)
-    CHECK_EQ(nrow(tmp), 1)
-    CHECK_EQ(ncol(tmp), 1)
-    CHECK_TRUE(all(tmp >= 0))
-    return(as.numeric(tmp))
+    vector.dist(theta, experiment$theta.star)
   }
   
   return(experiment)

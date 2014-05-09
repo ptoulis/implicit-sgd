@@ -422,3 +422,49 @@ run.benchmark.asymptotics <- function(experiment, nsamples=10,
   }
 }
 
+
+plot.both <- function(sgd, imp,
+                      ts, 
+                      ylim=c(5, 90),
+                      ylab="trace",
+                      title="a") {
+  all.points = 1:length(sgd)
+  plot(all.points, all.points, col="white", 
+       ylim=ylim, 
+       xlab="iterations",
+       ylab=ylab,
+       main=title)
+  
+  lines(all.points, sgd, lty=1)
+  points(ts, sgd[ts], pch=4)
+  
+  lines(all.points, imp, lty=4)
+  points(ts, imp[ts], pch=8)
+  legend(as.integer(0.7 * length(all.points)), 
+         0.8 * ylim[2], legend=c("SGD", "Implicit"), lty=c(1,4), pch=c(4, 8))
+}
+
+## additional plots.
+plot.trace <- function() {
+  load("out/odyssey/Jan29/trace.Rdata")
+  all.points = 1:250
+  e = normal.experiment(niters=100, p=20)
+  all.alpha = sapply(all.points, e$learning.rate)
+  
+  ts = seq(2, max(all.points), by=12)
+  alpha.ts = sapply(ts, e$learning.rate)
+  sgd = trace.object$sgd[all.points] / all.alpha
+  imp = trace.object$imp[all.points] / all.alpha
+  
+  plot.both(sgd, imp, ts)
+  
+}
+
+plot.cov.dist <- function() {
+  load("out/odyssey/Jan29/covDist.Rdata")
+  sgd = 20 * covDist$sgd.all[1:400]
+  imp = 20 * covDist$imp.all[1:400]
+  ts = seq(5, length(sgd), by=15)
+  plot.both(sgd, imp, ts, ylim=c(0, 18), ylab="|| empirical - theoretical ||")
+}
+

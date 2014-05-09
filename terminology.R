@@ -306,7 +306,7 @@ CHECK_experiment <- function(experiment) {
                c("name", "p", "theta.star", "niters", 
                  "sample.dataset", "Vx", "J",
                  "score.function",
-                 "learning.rate",
+                 "learning.rate", "scale",
                  "risk"), msg="Correct fields for the experiment")
   CHECK_columnVector(experiment$theta.star)
   CHECK_EQ(experiment$p, length(experiment$theta.star))
