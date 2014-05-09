@@ -129,9 +129,8 @@ implicit.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
   get.score.coeff <- function(theta) {
     # this returns the value  yt - h(theta' xt)  -- for a GLM
     # this is a scalar.
-    norm.score = experiment$score.function(theta, datapoint) / xt
-    CHECK_TRUE(all(abs(norm.score - norm.score[1]) < 1e-5))  # all are the same (score=xt * coeff)
-    return(norm.score[1])  
+    norm.score = yt - experiment$h.transfer(sum(theta * xt))
+    return(norm.score)
   }
   # 1. Define the search interval
   rt = at * get.score.coeff(theta.old)

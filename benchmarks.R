@@ -43,18 +43,6 @@ plot.all.benchmarks <- function(max.nPoints) {
   }
 }
 
-vector.dist <- function(x1, x2) {
-  m1 = matrix(x1, ncol=1)
-  m2 = matrix(x2, ncol=1)
-  return(matrix.dist(m1, m2))
-}
-
-matrix.dist <- function(m1, m2) {
-  CHECK_EQ(nrow(m1), nrow(m1))
-  CHECK_EQ(ncol(m1), ncol(m1))
-  norm(m1-m2, "F") / sqrt(nrow(m1) * ncol(m1))
-}
-
 plot.benchmark <- function(benchmarkObjectORFile,
                            max.nPoints=10,
                            toPng=F) {

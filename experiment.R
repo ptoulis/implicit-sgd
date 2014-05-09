@@ -6,9 +6,10 @@ library(mvtnorm)  # recall rmvnorm(n,...) returns n x p matrix.
 base.learning.rate <- function(t, gamma0, alpha, c) {
   # Computes a learning rate of the form g * (1 + a * t * g)^-c
   #
-  # Typically a, g have to be set according to the curvature of the loss function (log-likelihood)
-  # c = is usually problem-independent but may get different values according to convexity of loss
-  #
+  # Typically a, g have to be set according to the curvature 
+  # of the loss function (log-likelihood)
+  # c = is usually problem-independent but may get different values 
+  # according to convexity of loss.
   CHECK_TRUE(all(c(gamma0, alpha, c) >= 0), msg="Positive params in learning rate.")
   CHECK_INTERVAL(c, 0, 1, msg="c in [0,1]")
   x = exp(log(gamma0) - c * log(1 + alpha * gamma0 * t))
@@ -18,18 +19,20 @@ base.learning.rate <- function(t, gamma0, alpha, c) {
 }
 
 glm.score.function <- function(h.transfer, theta, datapoint) {
-  # Computes  (yt - h(theta' xt) * xt) = score function
+  # Computes  (yt - h(theta' xt)) * xt = score function
   # for a GLM model with transfer function "h.transfer"
   # 
   # Examples:
   #   normal model : h(x) = x  identity function
   #   poisson model : h(x) = e^x
   #   logistic regression : h(x) = logit(x)
-  # 
+  #
+  # Returns: px1 vector of the score (gradient of log-likelihood) 
   xt = datapoint$xt
   yt = datapoint$yt
+  # Check dimensions
   CHECK_EQ(length(xt), length(theta))
-  CHECK_EQ(length(yt), 1, msg="one-dimensional")
+  CHECK_EQ(length(yt), 1, msg="need one-dimensional outcome")
   yt.hat = h.transfer(sum(xt * theta))
   with(datapoint, matrix((yt - yt.hat) * xt, ncol=1))
 }
@@ -43,7 +46,7 @@ copy.experiment <- function(experiment) {
 }
 
 empty.experiment <- function(niters) {
-  # returns an empty EXPERIMENT object.
+  # Returns an empty EXPERIMENT object.
   # Useful for initialization and inspection.
   return(list(name="default",
               theta.star=matrix(0, nrow=1, ncol=1),
@@ -53,6 +56,7 @@ empty.experiment <- function(niters) {
 }
 
 get.experiment.description <- function(experiment) {
+  # Returns a description of an experiment as a string.
   return(sprintf(" Experiment %s: iters=%d p=%d limit.lr=%.2f",
                  experiment$name, 
                  experiment$niters, experiment$p,
@@ -61,8 +65,8 @@ get.experiment.description <- function(experiment) {
 
 get.experiment <- function(name="normal",
                            niters=1000) {
-  # Creates an EXPERIMENT object (see terminology)
-  # from the mnemonic name and the specified niters variable
+  # Creates an EXPERIMENT object (see terminology) from those 
+  # that are available. Use the mnemonic name and the specified niters variable
   function.name = sprintf("%s.experiment", name)
   e = do.call(function.name, args=list(niters=niters))
   e$name = name
@@ -70,14 +74,16 @@ get.experiment <- function(name="normal",
 }
 
 limit.variance <- function(experiment) {
+  # Computes the asymptotic variance from the Theorem of (Toulis et al, 2014)
   J = experiment$J
   limit.a = experiment$learning.rate(10^9) * 10^9
-  if(limit.a > 10^6) stop("There is a problem most likely")
+  if(limit.a > 10^3) stop("Error. Learning rate grows indefinitely.")
   I = diag(experiment$p)
-  return(limit.a^2 * solve(2 * limit.a * J - I) %*% J)
+  return(limit.a * solve(2 * limit.a * J - I) %*% J)
 }
 
 best.alpha <- function(max.alpha=2, nalphas=10^3, p=10) {
+  # TODO(ptoulis): Not sure what this is doing atm.
   coeffs = seq(0, max.alpha, length.out=nalphas)
   base.experiment = normal.experiment(p=p, niters=100)
   print(limit.variance(base.experiment))
@@ -93,7 +99,9 @@ best.alpha <- function(max.alpha=2, nalphas=10^3, p=10) {
   abline(v=x.critical, col="red")
 }
 
-covariance.matrix <- function(p) {
+sample.covariance.matrix <- function(p) {
+  # Samples a low-rank covariance matrix.
+  #
   u1 = 0.5 * seq(-1, 1, length.out=p)
   u2 = seq(0.2, 1, length.out=p)
   C = matrix(0, nrow=p, ncol=p)
@@ -122,7 +130,7 @@ normal.experiment <- function(niters, p=100, lr.scale=1.0) {
   # experiment$theta.star = matrix(runif(p, min=0, max=5), ncol=1) 
   experiment$theta.star = matrix(rep(1, p), ncol=1)  # all 1's
   experiment$p = p
-  A = covariance.matrix(p)
+  A = sample.covariance.matrix(p)
   experiment$Vx = A
   # 2. Define the sample dataset function.
   experiment$sample.dataset = function() {
@@ -139,7 +147,9 @@ normal.experiment <- function(niters, p=100, lr.scale=1.0) {
   id.fn = function(x) x
   gamma0 = 1 / sum(diag(A))
   lambda0 = min(eigen(A)$values)
+  
   # 3. Define the score function
+  experiment$h.transfer <- function(u) u
   experiment$score.function = function(theta, datapoint) {
     glm.score.function(h.transfer=id.fn, theta, datapoint)
   }
@@ -191,27 +201,23 @@ poisson.experiment <- function(niters, p=100, max.rate=5, lr.scale=1.0) {
   # 1. Define θ*
   experiment = empty.experiment(niters)
   experiment$name = "poisson"
-  experiment$theta.star = matrix(sparse.sample(p, as.integer(sqrt(p))), ncol=1)  # all 1's
-  experiment$p = p
+  experiment$theta.star = matrix(log(c(2, 12)), ncol=1)  # just a bivariate experiment
+  experiment$p = 2
   
   sample.X <- function(n) {
-    X = matrix(sparse.sample(n * p, nsize=4), nrow=n, ncol=p)
+    # code=0 then x=(0, 0), code=1 x=(1,0) etc.
+    code = sample(0:2, size=n, replace=T, prob=c(8, 1, 1))
+    X = matrix(0, nrow=n, ncol=2)
+    X[,1] <- as.numeric(code==1)
+    X[,2] <- as.numeric(code==2)
     return(X)
   }
   
   ## 1b Set Covariance of X
-  X.sample = sample.X(1000)
-
-  ## 2a. Set the maximum rate
-  #
-  # We will sample ~ X but will scale it down to achieve the specified max rate.
-  rates = exp(X.sample %*% experiment$theta.star)
-  if(is.infinite(max(rates))) {
-    warning("Possible numerical instability. Max rate = infinity")
-  }
-  experiment$scale = log(max.rate) / log(max(rates))
-  experiment$theta.star = experiment$scale * experiment$theta.star
-  experiment$Vx = cov(X.sample)
+  empirical.X = sample.X(20000) ## used for some empirical methods.
+  CHECK_EQ(sum(apply(empirical.X, 1, prod)), 0, msg="No (1,1) vectors")
+  CHECK_MU0(apply(empirical.X, 1, sum)==0, 0.8)
+  experiment$Vx = cov(empirical.X)
   
   # 2. Define the sample dataset function.
   experiment$sample.dataset = function() {
@@ -223,14 +229,19 @@ poisson.experiment <- function(niters, p=100, max.rate=5, lr.scale=1.0) {
     CHECK_TRUE(nrow(X) == niters)
     return(list(X=X, Y=Y))
   }
-  A = experiment$Vx
-  gamma0 = 1 / sum(diag(A))
-  lambda0 = min(eigen(A)$values)
+
+  experiment$h.transfer <- function(u) {
+    exp(u)
+  }
   # 3. Define the score function
   experiment$score.function = function(theta, datapoint) {
     glm.score.function(h.transfer=exp, theta, datapoint)
   }
   
+  
+  A = experiment$Vx
+  gamma0 = 1 / sum(diag(A))
+  lambda0 = min(eigen(A)$values)
   # 4. Define the learning rate
   experiment$learning.rate <- function(t) {
     # stop("Need to define learning rate per-application.")
@@ -238,8 +249,16 @@ poisson.experiment <- function(niters, p=100, max.rate=5, lr.scale=1.0) {
   }
   
   # 4b. Fisher information
-  experiment$J = A
-  
+  # Recall J= E(h'(theta.star' x) x x')
+  experiment$J = matrix(0, nrow=2, ncol=2)
+  N = nrow(empirical.X)
+  for(i in 1:N) {
+    x = empirical.X[i, ]
+    h.prime = exp(sum(experiment$theta.star * x))
+    experiment$J <- experiment$J + h.prime * x %*% t(x)
+  }
+  experiment$J = experiment$J / N
+  CHECK_NEAR(diag(experiment$J), 0.1 * exp(experiment$theta.star), tol=0.05)
   # 5. Define the risk . This is usually the negative log-likelihood
   truth = experiment$theta.star
   experiment$risk <- function(theta) {
