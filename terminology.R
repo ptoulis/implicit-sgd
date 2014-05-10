@@ -70,15 +70,16 @@ CHECK_multipleOnlineOutput <- function(mu.out, experiment) {
 
 ## Some L2 distance functions.
 vector.dist <- function(x1, x2) {
+  # ||x1-x2|| / sqrt(n)  == normalized by the size.
   m1 = matrix(x1, ncol=1)
   m2 = matrix(x2, ncol=1)
   return(matrix.dist(m1, m2))
 }
 
 matrix.dist <- function(m1, m2) {
-  CHECK_EQ(nrow(m1), nrow(m1))
-  CHECK_EQ(ncol(m1), ncol(m1))
-  norm(m1-m2, "F") / sqrt(nrow(m1) * ncol(m1))
+  CHECK_EQ(nrow(m1), nrow(m2))
+  CHECK_EQ(ncol(m1), ncol(m2))
+  sqrt(sum((m1-m2) %*% t(m1-m2))) / sqrt(nrow(m1) * ncol(m1))
 }
 
 default.var.dist = function(experiment, nsamples) {
