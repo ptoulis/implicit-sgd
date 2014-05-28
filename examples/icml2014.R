@@ -86,7 +86,12 @@ sparse.sample <- function(nsamples, nsize) {
   return(sample(s, size=nsamples, replace=T, prob=(1+s)^-1))
 }
 
-poisson.experiment <- function(niters, lr.scale=1.0) {
+
+kPoissonQ = 0.2
+kThetaStar = log(c(2, 4))
+kAlphaRate = 10/3
+
+poisson.experiment <- function(niters) {
   # Poisson regression
   #
   # Assume xt ~ N(0, A)  where A has eigenvalues from 0.01 to 1
@@ -101,12 +106,13 @@ poisson.experiment <- function(niters, lr.scale=1.0) {
   #   lr.scale = scale of learning rate
   experiment = empty.experiment(niters)
   experiment$name = "poisson"
-  experiment$theta.star = matrix(log(c(2, 4)), ncol=1)  # just a bivariate experiment
+  experiment$theta.star = matrix(kThetaStar, ncol=1)  # just a bivariate experiment
   experiment$p = 2
   
+  Q = kPoissonQ # probability (0, 1) and (1, 0)
   sample.X <- function(n) {
     # code=0 then x=(0, 0), code=1 x=(1,0) etc.
-    code = sample(0:2, size=n, replace=T, prob=c(8, 1, 1))
+    code = sample(0:2, size=n, replace=T, prob=c((1-2*Q), Q, Q))
     X = matrix(0, nrow=n, ncol=2)
     X[,1] <- as.numeric(code==1)
     X[,2] <- as.numeric(code==2)
@@ -116,7 +122,7 @@ poisson.experiment <- function(niters, lr.scale=1.0) {
   ## 1b Set Covariance of X
   empirical.X = sample.X(20000) ## used for some empirical methods.
   CHECK_EQ(sum(apply(empirical.X, 1, prod)), 0, msg="No (1,1) vectors")
-  CHECK_MU0(apply(empirical.X, 1, sum)==0, 0.8)
+  CHECK_MU0(apply(empirical.X, 1, sum)==0, 1-2*Q)
   experiment$Vx = cov(empirical.X)
   
   # 2. Define the sample dataset function.
@@ -139,7 +145,7 @@ poisson.experiment <- function(niters, lr.scale=1.0) {
   }
   
   
-  alpha = 10/3
+  alpha = kAlphaRate
   # 4. Define the learning rate
   experiment$learning.rate <- function(t) {
     # stop("Need to define learning rate per-application.")
@@ -158,7 +164,7 @@ poisson.experiment <- function(niters, lr.scale=1.0) {
     experiment$J <- experiment$J + h.prime * x %*% t(x)
   }
   experiment$J = experiment$J / N
-  CHECK_NEAR(diag(experiment$J), 0.1 * exp(experiment$theta.star), tol=0.05)
+  CHECK_NEAR(diag(experiment$J), Q * exp(experiment$theta.star), tol=0.05)
   # 5. Define the risk . This is usually the negative log-likelihood
   truth = experiment$theta.star
   experiment$risk <- function(theta) {
@@ -169,13 +175,16 @@ poisson.experiment <- function(niters, lr.scale=1.0) {
 }
 
 
+
+
 run.poisson.experiment <- function(niters=100, nsamples=20) {
-  e = poisson.experiment(niters=niters, lr.scale=1)
+  e = poisson.experiment(niters=niters)
   V = experiment.limit.variance(e)
-  ## Theoretical values
+  ## 1. Theoretical values
   Var.numerical = experiment.limit.variance(e)
   limit.a = e$learning.rate(10^9) * 10^9
-  gamma = 2 * limit.a * 0.1
+  CHECK_NEAR(limit.a, kAlphaRate, 0.01)
+  gamma = 2 * limit.a * kPoissonQ
   print(sprintf("Limit a=%.3f  gamma=%.3f", limit.a, gamma))
   Var.theoretical = (gamma/2) * diag(c(exp(e$theta.star) / (gamma * exp(e$theta.star)-1)))
   print("Theoretical variance")
@@ -183,19 +192,20 @@ run.poisson.experiment <- function(niters=100, nsamples=20) {
   print("Numerical variance")
   print(Var.numerical)
   
-  ## Run all algorithms.
+  ## 2. Run all algorithms.
   out = run.online.algorithm.many(e, algorithm.names=c(kSGD, kIMPLICIT), nsamples=nsamples)
   
+  # 3. Get estimates
   theta.im = t(out$implicit.onlineAlgorithm[[niters]]) # samples x p
   theta.sgd = t(out$sgd.onlineAlgorithm[[niters]]) # samples x p
   
-  ## Implicit method
+  ## 4. Variance of Implicit method
   Var.implicit = (1/e$learning.rate(niters)) * cov(theta.im)
   print("Variance of implicit updates")
   print(Var.implicit)
   
-  ## SGD method
-  # Find bad estimates in SGD
+  ## 5. Variance of SGD method
+  #   5b. Find bad estimates in SGD
   sgd.risk = sapply(1:nrow(theta.sgd), function(i) e$risk(theta.sgd[i,]))
   im.risk =  sapply(1:nrow(theta.im), function(i) e$risk(theta.im[i,]))
   bad.estimates = which(sgd.risk > quantile(sgd.risk, probs=0.75))
@@ -206,15 +216,34 @@ run.poisson.experiment <- function(niters=100, nsamples=20) {
   Var.sgd = (1/e$learning.rate(niters)) * cov(theta.sgd)
   print("Variance of SGD updates (< Q3)")
   print(Var.sgd)
-  ## create quantiles 
+  
+  ## 6. create quantiles 
   print("Risk quantiles for SGD and Implicit")
   print(round(quantile(sqrt(2) * sgd.risk, probs=c(0.25, 0.5, 0.75, 0.85, 0.95, 1.0)), 2))
   print(round(quantile(sqrt(2) * im.risk, probs=c(0.25, 0.5, 0.75, 0.85, 0.95, 1.0)), 2))
   
-  ## Save results 
+  ## 7. Save results 
   save(out, file="out/poisson-experiment.Rdata")
 }
 
+postProcess.poisson <- function() {
+  load("out/poisson-experiment.Rdata")
+  niters = length(out$sgd.onlineAlgorithm)
+  nsamples = ncol(out$sgd.onlineAlgorithm[[1]])
+  print(sprintf("iters = %d ,samples=%d", niters, nsamples))
+  e = poisson.experiment(niters=niters)
+  limit.a = e$learning.rate(10^9) * 10^9
+  gamma = 2 * limit.a * kPoissonQ
+  
+  Var.theoretical = (gamma/2) * diag(c(exp(e$theta.star) / (gamma * exp(e$theta.star)-1)))
+  
+  ts = seq(1, niters)
+  y = sapply(ts, function(t) { theta.im = t(out$implicit.onlineAlgorithm[[t]]);
+                               V = (1/e$learning.rate(t)) * cov(theta.im);
+                               matrix.dist(V, Var.theoretical)
+  })
+  plot(ts, y, type="l")
+}
 
 
 
