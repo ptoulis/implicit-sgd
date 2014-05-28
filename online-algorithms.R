@@ -124,23 +124,23 @@ implicit.onlineAlgorithm <- function(t, online.out, data.history, experiment) {
   datapoint = get.dataset.point(dataset=data.history, t=t)
   at = experiment$learning.rate(t)
   xt = datapoint$xt
+  norm.xt = sum(xt^2)
   yt = datapoint$yt
   theta.old = onlineOutput.estimate(online.out, t-1)
-  get.score.coeff <- function(theta) {
-    # this returns the value  yt - h(theta' xt)  -- for a GLM
+  get.score.coeff <- function(ksi) {
+    # this returns the value  yt - h(theta_{t-1}' xt + xt^2 ξ)  -- for a GLM
     # this is a scalar.
-    norm.score = yt - experiment$h.transfer(sum(theta * xt))
-    return(norm.score)
+    return(yt - experiment$h.transfer(sum(theta.old * xt) + norm.xt * ksi))
   }
   # 1. Define the search interval
-  rt = at * get.score.coeff(theta.old)
+  rt = at * get.score.coeff(0)
   Bt = c(0, rt)
   if(rt < 0) {
     Bt <- c(rt, 0)
   }
   
   implicit.fn <- function(u) {
-    u  - at * get.score.coeff(theta.old + u * xt)
+    u  - at * get.score.coeff(u)
   }
   # 2. Solve implicit equation
   xit = NA
