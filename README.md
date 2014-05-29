@@ -5,7 +5,7 @@ This is the accompanying code implementation of the methods and algorithms
 presented
 ```
 Panos Toulis, Jason Rennie, Edoardo Airoldi, 
-"Stochastic Approximation with Implicit Updates. Application in Robust Online Learning of GLMs.", 
+"Statistical analysis of stochastic gradient methods for generalized linear models.", 
 ICML, Beijing, China, 2014.
 ```
 
