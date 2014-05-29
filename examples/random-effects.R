@@ -36,12 +36,12 @@ create.dataset <- function(dim.p=10**2, dim.n=10**5) {
   
   # Samples the covariates
   sample.X <- function() {
-    X = matrix(rbinom(dim.n * dim.p, size=1, prob=0.05), nrow=dim.n)
+    X = matrix(rbinom(dim.n * dim.p, size=1, prob=0.1), nrow=dim.n)
   }
   
   X = sample.X()
   beta = sample.beta()
-  Y = X %*% beta + rnorm(dim.n)
+  Y = X %*% beta + rnorm(dim.n, sd=1.0)
   dataset = list(X=X, beta=beta, Y=Y)
   save(dataset, file="dataset.Rdata")
   print("> File saved as dataset.Rdata")
@@ -52,6 +52,10 @@ vector.dist <- function(x, y) {
     stop("Vectors should have equal length to calculate distance.")
   # Compute MSE.
   sqrt(sum((x-y)^2))
+}
+CHECK <- function(claim, msg) {
+  if(!claim) 
+    stop(msg)
 }
 
 analyze.dataset <- function(method="lm") {
@@ -82,7 +86,11 @@ analyze.dataset <- function(method="lm") {
                 method,
                 perf[["elapsed"]],
                 vector.dist(true.beta, beta.hat)))
-  qqplot(true.beta, beta.hat)
+  plot(true.beta, beta.hat, ylim=c(min(true.beta), max(true.beta)), pch=20)
+  points(true.beta, true.beta, pch="x", col="magenta")
+  for(b in true.beta) {
+    abline(h=b, lty=3, lwd=0.3)
+  }
 }
 
 analyze.dataset.lm <- function(dataset) {
@@ -105,18 +113,38 @@ analyze.dataset.sgd <- function(dataset) {
   beta.old = rep(0, p) ## initial estimate
   beta.new = beta.old
   print(sprintf("> Setting learning rates."))
-  learning.rates = sapply(1:n, function(i) 1 / (1 + 0.05 * i))
+  # 1. Pick the optimal learning rate:
+  # By (Toulis et.al., 2014) the variance will be
+  # V = a^2 f^2 (2af J - I)^-1 * J
+  #  where a=learning rate, f=dispersion param=Var(y), J=fisher information, I=identity matrix.
+  #  But in this model J = (1/f) E(xx') = (1/f) q I  where q=P(xi=1)
+  #  and so, f * J = q I.  Thus the variance is V = f * q * (a^2) / (2aq-1) I
+  # To minimize variance we thus need to minimize a^2 / (2aq-1)
+  # which leads to a.opt = 1/q. If we assume a_n = 1 / (1 + h * n) then
+  # clearly a_n * n -> a = 1/h and thus we need to set h=q=1/a for the optimal value.
+  #
+  a.optimal = 1 / (sum(dataset$X) / (p * n))
+  print(sprintf("Optimal a = %.3f", a.optimal))
+  learning.rates = sapply(1:n, function(i) 1 / (1 + (1/a.optimal) * i))
   
+  # 2. Set the SGD method (either explicit or implicit)
   Y = dataset$Y
   X = dataset$X
+  use.explicit = F # what method to use
+  print(sprintf("> Using %s updates in SGD",
+                ifelse(use.explicit, "explicit", "implicit")))
   pb = txtProgressBar(style=3)
+  
   for(i in 1:n) {
     ai = learning.rates[i]
     xi = X[i, ] # current covariate vector
     Yi.pred = sum(beta.old * xi)
-    ksi = ai * (Y[i] - Yi.pred) / (1 + sum(xi^2) * ai)
-    # beta.new = beta.old + ai * (Y[i] - Yi.pred) * xi # this is the explicit version
-    beta.new = beta.old + ksi * xi # implicit method
+    if(use.explicit) {
+      beta.new = beta.old + ai * (Y[i] - Yi.pred) * xi      
+    } else {
+      ksi = ai * (Y[i] - Yi.pred) / (1 + sum(xi^2) * ai) 
+      beta.new = beta.old + ksi * xi # implicit sgd  
+    }
     beta.old = beta.new
     setTxtProgressBar(pb, value=i/n)
   }
