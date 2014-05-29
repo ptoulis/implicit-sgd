@@ -5,6 +5,7 @@
 ##       and fit a linear normal model Y = X b + e
 ##
 library(mvtnorm)
+library(biglm)
 rm(list=ls())
 
 create.dataset <- function(dim.p=10**2, dim.n=10**5) {
@@ -60,10 +61,15 @@ analyze.dataset <- function(method="lm") {
   perf = 0
   ## beta estimates from the method
   beta.hat = rep(0, ncol(dataset$X))
+  dataset$beta = NULL # remove ground truth
   if(method=="lm") {
     perf = system.time({ beta.hat = analyze.dataset.lm(dataset) })
-  } else {
+  } else if(method=="sgd"){
     perf = system.time({ beta.hat = analyze.dataset.sgd(dataset) })
+  } else if(method=="biglm") {
+    perf = system.time({ beta.hat = analyze.dataset.biglm(dataset) })
+  } else {
+    stop(sprintf("Method  %s not supported..", method))
   }
   print(sprintf("> %s() took %.2f secs. MSE=%.3f", 
                 method,
@@ -74,6 +80,14 @@ analyze.dataset <- function(method="lm") {
 
 analyze.dataset.lm <- function(dataset) {
   fit = lm(Y ~ 0 + X, data=dataset)
+  return(as.numeric(fit$coefficients))
+}
+analyze.dataset.biglm <- function(dataset) {
+  dat = as.data.frame(dataset)
+  data(dat)
+  formula = Y ~ 0 + .
+  print(names(dat))
+  fit = bigglm(formula, data=dat)
   return(as.numeric(fit$coefficients))
 }
 
