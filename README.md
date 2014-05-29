@@ -5,7 +5,7 @@ This is the accompanying code implementation of the methods and algorithms
 presented
 ```
 Panos Toulis, Jason Rennie, Edoardo Airoldi, 
-"Statistical analysis of stochastic gradient methods for generalized linear models.", 
+"Statistical analysis of stochastic gradient methods for generalized linear models", 
 ICML, Beijing, China, 2014.
 ```
 
