@@ -4,6 +4,13 @@
 ## Goal: Create 10 million observations (Y) and 10k binary covariates (X)
 ##       and fit a linear normal model Y = X b + e
 ##
+## Example usage:
+#   create.dataset()  # creates a dataset with 100 covariates, 100,000 obs.
+#   analyze.dataset(method="sgd") # uses sgd (implicit) to fit
+#   analyze.dataset(method="lm") # uses R's lm() method.
+#
+#  Note: create.dataset() saves the dataset in a file (current wd)
+#
 library(mvtnorm)
 library(biglm)
 rm(list=ls())
@@ -82,6 +89,7 @@ analyze.dataset.lm <- function(dataset) {
   fit = lm(Y ~ 0 + X, data=dataset)
   return(as.numeric(fit$coefficients))
 }
+
 analyze.dataset.biglm <- function(dataset) {
   dat = as.data.frame(dataset)
   data(dat)
