@@ -11,15 +11,16 @@
 #
 #  Note: create.dataset() saves the dataset in a file (current wd)
 #
+library(Matrix)
 library(mvtnorm)
 library(biglm)
 rm(list=ls())
 
-create.dataset <- function(dim.p=10**2, dim.n=10**5) {
+create.sparse.dataset <- function(dim.p=10**2, dim.n=10**5) {
   print(sprintf("> Creating dataset with #obs=%d and #covariates=%d", 
                 dim.n, dim.p))
   sample.beta <- function() {
-    # Samples a beta vector (px1) of model parameters.
+    # 1. Samples a beta vector (px1) of model parameters.
     # The model parameters are either "high", "medium" or "low" (levels)
     beta.levels = c(-1, -0.35, -0.001, 0.001, 0.35, 1)
     # How frequent are the levels
@@ -31,20 +32,37 @@ create.dataset <- function(dim.p=10**2, dim.n=10**5) {
     }
     if(length(beta) != dim.p)
       stop("Beta vector of parameters has wrong size.")
-    return(sample(beta))
+    return(as(sample(beta), "sparseMatrix"))
   }
   
-  # Samples the covariates
+  # 2. Sample the covariates (nxp) sparse matrix.
   sample.X <- function() {
-    X = matrix(rbinom(dim.n * dim.p, size=1, prob=0.1), nrow=dim.n)
+    # Create a sparse binary feature matrix
+    X = sparseMatrix(i=c(), j=c(), dims=c(dim.n, dim.p))
+    nnzeros = min(0.05 * length(X), length(X)**0.7)
+    print(sprintf("> Sampling %e non-zeros out of %e observations.", nnzeros, length(X)))
+    nnzero.pos = sample(length(X), size=nnzeros, replace=F)
+    print("> Sampling finished. Sampling dataset.")
+    nnzero.i = 1 + as.integer(nnzero.pos / dim.p)
+    nnzero.j = nnzero.pos - (nnzero.i-1) * dim.p
+    k =  which(nnzero.j==0)
+    nnzero.i[k] <- nnzero.i[k] - 1
+    nnzero.j[k] <- dim.p
+    return(sparseMatrix(i=nnzero.i, j=nnzero.j, dims=c(dim.n, dim.p)))
   }
   
   X = sample.X()
   beta = sample.beta()
+  # 3. Sample the outcomes (nx1)
   Y = X %*% beta + rnorm(dim.n, sd=1.0)
+  print("> Dataset size...")
+  print(object.size(X), units="Mb")
+  filename = sprintf("datasets/dataset-p%d-n%d.Rdata", log(dim.p, 10), log(dim.n, 10))
   dataset = list(X=X, beta=beta, Y=Y)
-  save(dataset, file="dataset.Rdata")
-  print("> File saved as dataset.Rdata")
+  print(sprintf("> Saving file to %s", filename))
+  save(dataset, file=filename)
+  rm(list=c("beta","X", "Y")) # free up some memory
+  gc()
 }
 
 vector.dist <- function(x, y) {
@@ -99,12 +117,9 @@ analyze.dataset.lm <- function(dataset) {
 }
 
 analyze.dataset.biglm <- function(dataset) {
-  dat = as.data.frame(dataset)
-  data(dat)
-  formula = Y ~ 0 + .
-  print(names(dat))
-  fit = bigglm(formula, data=dat)
-  return(as.numeric(fit$coefficients))
+  df = as.data.frame(dataset)
+  fit = bigglm(terms(Y ~ 0 + ., data=df), data=df)
+  return(as.numeric(coef(fit)))
 }
 
 analyze.dataset.sgd <- function(dataset) {
@@ -149,4 +164,8 @@ analyze.dataset.sgd <- function(dataset) {
     setTxtProgressBar(pb, value=i/n)
   }
   return(beta.new)
+}
+
+fit.implicit <- function(x, y) {
+  
 }
