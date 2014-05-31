@@ -16,7 +16,13 @@ library(mvtnorm)
 library(biglm)
 rm(list=ls())
 
-create.sparse.dataset <- function(dim.p=10**2, dim.n=10**5) {
+dataset.filename <- function(dim.p, dim.n, is.sparse) {
+  return(sprintf("datasets/%sDataset-p%d-n%d.Rdata", 
+                 ifelse(is.sparse,"sparse", ""),
+                 log(dim.p, 10), log(dim.n, 10)))
+}
+
+create.dataset <- function(dim.p=10**2, dim.n=10**5, sparse=F) {
   print(sprintf("> Creating dataset with #obs=%d and #covariates=%d", 
                 dim.n, dim.p))
   sample.beta <- function() {
@@ -32,23 +38,40 @@ create.sparse.dataset <- function(dim.p=10**2, dim.n=10**5) {
     }
     if(length(beta) != dim.p)
       stop("Beta vector of parameters has wrong size.")
-    return(as(sample(beta), "sparseMatrix"))
+    if(sparse) {
+      return(as(sample(beta), "sparseMatrix"))
+    } else {
+      return(sample(beta))
+    }
   }
   
   # 2. Sample the covariates (nxp) sparse matrix.
   sample.X <- function() {
     # Create a sparse binary feature matrix
-    X = sparseMatrix(i=c(), j=c(), dims=c(dim.n, dim.p))
-    nnzeros = min(0.05 * length(X), length(X)**0.7)
-    print(sprintf("> Sampling %e non-zeros out of %e observations.", nnzeros, length(X)))
-    nnzero.pos = sample(length(X), size=nnzeros, replace=F)
-    print("> Sampling finished. Sampling dataset.")
-    nnzero.i = 1 + as.integer(nnzero.pos / dim.p)
-    nnzero.j = nnzero.pos - (nnzero.i-1) * dim.p
-    k =  which(nnzero.j==0)
-    nnzero.i[k] <- nnzero.i[k] - 1
-    nnzero.j[k] <- dim.p
-    return(sparseMatrix(i=nnzero.i, j=nnzero.j, dims=c(dim.n, dim.p)))
+    L = dim.p * dim.n 
+    if(sparse) {
+      # 1. Pick non-zeros (and positions in the matrix)
+      nnzeros = min(0.05 * L, L**0.7)
+      print(sprintf("> Sampling %e non-zeros out of %e observations.", nnzeros, L))
+      nnzero.pos = sample(L, size=nnzeros, replace=F)
+      print("> Sampling finished. Sampling dataset.")
+      nnzero.i = 1 + as.integer(nnzero.pos / dim.p)
+      nnzero.j = nnzero.pos - (nnzero.i-1) * dim.p
+      k =  which(nnzero.j==0)
+      nnzero.i[k] <- nnzero.i[k] - 1
+      nnzero.j[k] <- dim.p
+      return(sparseMatrix(i=nnzero.i, j=nnzero.j, dims=c(dim.n, dim.p)))
+    } else {
+      # 1. Pick non-zeros (and positions in the matrix)
+      nnzeros = min(0.05 * L)
+      print(sprintf("> Sampling %e non-zeros out of %e observations.", nnzeros, L))
+      nnzero.pos = sample(L, size=nnzeros, replace=F)
+      print("> Sampling finished. Sampling dataset.")
+      
+      X = matrix(0, nrow=dim.n, ncol=dim.p)
+      X[nnzero.pos] <- 1
+      return(X)
+    }
   }
   
   X = sample.X()
@@ -57,7 +80,7 @@ create.sparse.dataset <- function(dim.p=10**2, dim.n=10**5) {
   Y = X %*% beta + rnorm(dim.n, sd=1.0)
   print("> Dataset size...")
   print(object.size(X), units="Mb")
-  filename = sprintf("datasets/dataset-p%d-n%d.Rdata", log(dim.p, 10), log(dim.n, 10))
+  filename = dataset.filename(dim.p, dim.n, sparse)
   dataset = list(X=X, beta=beta, Y=Y)
   print(sprintf("> Saving file to %s", filename))
   save(dataset, file=filename)
@@ -76,15 +99,16 @@ CHECK <- function(claim, msg) {
     stop(msg)
 }
 
-analyze.dataset <- function(method="lm") {
+analyze.dataset <- function(dim.p, dim.n, method="lm", sparse=F) {
   # Fits the model using the dataset and prints performance metrics.
   # method = { lm, sgd }
   #
-  print("> Loading dataset..")
-  load(file="dataset.Rdata")
+  filename = dataset.filename(dim.p, dim.n, is.sparse=sparse)
+  print(sprintf("> Loading dataset..%s. Is it sparse? %s", filename, sparse))
+  load(file=filename)
   print(sprintf("> Dataset loaded. no.obs=%d no.covariates=%d",
                 nrow(dataset$X), ncol(dataset$X)))
-  true.beta = dataset$beta
+  true.beta = as.numeric(dataset$beta)
   print(sprintf("> Fitting using %s()..", method))
   ## Time performance of method
   perf = 0
@@ -116,6 +140,10 @@ analyze.dataset.lm <- function(dataset) {
   return(as.numeric(fit$coefficients))
 }
 
+analyze.dataset.sparse.lm <- function(dataset) {
+  
+}
+
 analyze.dataset.biglm <- function(dataset) {
   df = as.data.frame(dataset)
   fit = bigglm(terms(Y ~ 0 + ., data=df), data=df)
@@ -125,6 +153,9 @@ analyze.dataset.biglm <- function(dataset) {
 analyze.dataset.sgd <- function(dataset) {
   p = ncol(dataset$X)
   n = nrow(dataset$X)
+  Y = dataset$Y
+  X = dataset$X
+  
   beta.old = rep(0, p) ## initial estimate
   beta.new = beta.old
   print(sprintf("> Setting learning rates."))
@@ -138,13 +169,11 @@ analyze.dataset.sgd <- function(dataset) {
   # which leads to a.opt = 1/q. If we assume a_n = 1 / (1 + h * n) then
   # clearly a_n * n -> a = 1/h and thus we need to set h=q=1/a for the optimal value.
   #
-  a.optimal = 1 / (sum(dataset$X) / (p * n))
+  a.optimal = 1 / (sum(X) / (n * p))
   print(sprintf("Optimal a = %.3f", a.optimal))
   learning.rates = sapply(1:n, function(i) 1 / (1 + (1/a.optimal) * i))
   
   # 2. Set the SGD method (either explicit or implicit)
-  Y = dataset$Y
-  X = dataset$X
   use.explicit = F # what method to use
   print(sprintf("> Using %s updates in SGD",
                 ifelse(use.explicit, "explicit", "implicit")))

@@ -3,3 +3,5 @@ out/*
 *Rdata
 *.sh
 *png
+*zip
+*csv
