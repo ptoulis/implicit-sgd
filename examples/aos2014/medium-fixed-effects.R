@@ -1,3 +1,6 @@
+# Copyright (c) 2013
+# Panos Toulis, ptoulis@fas.harvard.edu
+#
 ## This is a self-contained file as it needs to work without reference to the 
 ## sgd R library here.
 ## 
@@ -20,7 +23,7 @@ source("datasets.R")
 analyze.dataset <- function(dim.p, dim.n, method="glm", verbose=F) {
   # Fits the model using the dataset and prints performance metrics.
   # method = { lm, sgd }
-  if(dim.p >= 1e3 || dim.n >= 1e6 || dim.p * dim.n > 1e8)
+  if(dim.p > 1e3 || dim.n > 1e5 || dim.p * dim.n > 1e8)
     stop("This is a Big dataset. Please use the large-fixed-effects.R file to analyze it.")
   # 1. Load dataset
   df = load.dataset(dim.p, dim.n)
@@ -59,7 +62,35 @@ analyze.dataset.glm <- function(dataset) {
   return(as.numeric(fit$coefficients))
 }
 
-analyze.dataset.sgd <- function(dataset, tol=1e-5) {
+
+solve.best.alpha <- function(q.hat, p) {
+  # Solves for the best possile alpha rate based on (Toulis et al, 2014)
+  # Recall that the variance is proportional to (2aJ-I)^-1 J (see below)
+  # Therefore, imposing a structure on the Fisher information matrix
+  # (e.g. consider the normal linear model), then we can figure out 
+  # the learning rate that minimizes some metric.
+  # (in this case we minimize the trace).
+  # 
+  # The computation assumes that all columns but the first of the design X matrix
+  # has independent probability of being 1, equal to q.
+  # q.hat = estimate of this probability based on "1" in X.
+  #
+  # q.hat = as.numeric((rowSums(S.hat)[1] + colSums(S.hat)[1] + sum(diag(S.hat)) - 3) / (3 * (p-1)))
+  # print(q.hat)
+  # This solves the two eigenvalues that are not equal to q (1-q) with mul (p-2)
+  # (recall p =#covariates)#
+  #
+  lambdas = as.numeric(polyroot(c(q.hat * (1-q.hat), -(1+q.hat + q.hat^2* (p-2)), 1)))
+  other.lambdas = rep(q.hat * (1-q.hat), p-2)
+  lambdas = c(lambdas, other.lambdas)
+  out = optim(par=0, 
+              fn=function(x) sum(x^2 * lambdas / (2 * x * lambdas-1)), 
+              lower=1 / (2 * min(lambdas)) + 1e-4,
+              method="L-BFGS-B")
+  return(out$par)
+}
+
+analyze.dataset.sgd <- function(dataset) {
   p = ncol(dataset) - 1
   n = nrow(dataset)
   Y = as.numeric(dataset[, p+1])
@@ -79,21 +110,34 @@ analyze.dataset.sgd <- function(dataset, tol=1e-5) {
   # which leads to a.opt = 1/q. If we assume a_n = 1 / (1 + h * n) then
   # clearly a_n * n -> a = 1/h and thus we need to set h=q=1/a for the optimal value.
   #
-  a.optimal = 1 / (sum(X) / (n * p))
-  learning.rates = 1 / (1 + (1/a.optimal) * seq(1, n))
+  #a.optimal = 1 / (sum(X) / (n * p))
+  #learning.rates = 1 / (1 + (1/a.optimal) * seq(1, n))
   
   # 2. Set the SGD method (either explicit or implicit)
   use.explicit = F # what method to use
-  print(sprintf("> Using %s updates in SGD. Optimal a=%.3f",
-                ifelse(use.explicit, "explicit", "implicit"), a.optimal))
+  print(sprintf("> Using %s updates in SGD.",
+                ifelse(use.explicit, "explicit", "implicit")))
   pb = txtProgressBar(style=3)
-  
+  # J.est <- diag(p)
+  update.optimal.alpha = F
+  q.hat = (sum(X) - n) / (n * (p-1))
+  alpha.opt = solve.best.alpha(q.hat, p)
+  print(sprintf("q.hat=%.3f -- Learning rate limit a = %.3f", q.hat, alpha.opt))
   for(i in 1:n) {
-    ai = learning.rates[i]
     xi = X[i, ] # current covariate vector
     yi = Y[i]
+    if(update.optimal.alpha) {
+      J.est = (1/i) * ((i-1) * J.est + xi %*% t(xi))
+      alpha.new = solve.best.a(S.hat=J.est)
+      if(abs(alpha.new - alpha.opt) < 1e-5) {
+        update.optimal.alpha = F
+        print(sprintf("Optimal alpha reached.."))
+      }
+      alpha.opt = alpha.new
+    }
+    ai = 1 / (1 + (1/alpha.opt) * i)
     Yi.pred = sum(beta.old * xi)
-    Si = sum(xi)
+    Si = sum(xi^2)
     if(use.explicit) {
       beta.new = beta.old + ai * (yi - Yi.pred) * xi      
     } else {
@@ -108,16 +152,34 @@ analyze.dataset.sgd <- function(dataset, tol=1e-5) {
 
 
 ## Main function to create the benchmark
-run.benchmark <- function(dim.p.vector=c(10, 100),
-                          dim.n.vector=c(100, 1000, 10000),
-                          methods=c("glm", "biglm", "sgd"),
-                          ntrials=5) {
-  avoid.method <- function(p, n, method) {
-    c1 = (method=="glm" && n >= 10**5)
-    c2 = (method=="biglm" && p >= 1000)
-    return(c1 || c2)
+run.experiment.one <- function(dim.p.vector=seq(1e1, 250, by=10),
+                          dim.n.vector=seq(1e2, 1e5, by=1e3),
+                          methods=c("glm", "sgd"),
+                          nsamples=5,
+                          results.file="results-experiment-one.csv") {
+  require(stringr)
+  results = matrix(0, nrow=0, ncol=6)
+  metrics = c("time.", "mse.")
+  colnames(results) = c("p", "n", as.character(sapply(methods, function(m) str_c(metrics, m))))
+  
+  for(i in 1:nsamples) {
+    n = sample(dim.n.vector, size=1)
+    p = sample(dim.p.vector, size=1)
+    filename = dataset.filename(n, p)
+    create.dataset(p, n)
+    out.row = c(p, n)
+    for(m in 1:length(methods)) {
+      method = methods[m]
+      out = analyze.dataset(p, n, method=method)
+      out.row = c(out.row, out$time, out$mse)
+    }
+    print(round(out.row, 3))
+    results = rbind(results, out.row)
+    rownames(results) <- NULL
+    remove.dataset(p, n)
+    write.csv(results, file=results.file)
   }
-  benchmark.results = list(method=)
+  return(results)
 }
 
 
