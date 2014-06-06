@@ -2,7 +2,7 @@
 # Panos Toulis, ptoulis@fas.harvard.edu
 #
 # Using the simulation setup as in glmnet JoSS paper(Friedman, Hastie, Tibshirani)
-#
+# http://www.jstatsoft.org/v33/i01/
 rm(list=ls())
 library(mvtnorm)
 library(glmnet)
