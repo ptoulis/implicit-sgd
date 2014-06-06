@@ -1,5 +1,9 @@
-dataset.filename <- function(dim.p, dim.n, beta.file=F) {
-  return(sprintf("datasets/Dataset-p%1.1f-n%1.1f%s.csv", 
+# Copyright (c) 2013
+# Panos Toulis, ptoulis@fas.harvard.edu
+#
+dataset.filename <- function(dim.p, dim.n, beta.file=F, is.big=F) {
+  return(sprintf("datasets/%sDataset-p%1.1f-n%1.1f%s.csv", 
+                 ifelse(is.big, "big/", ""),
                  log(dim.p, 10), log(dim.n, 10),
                  ifelse(beta.file, "-BetaFile", "")))
 }
@@ -42,7 +46,7 @@ sample.X <- function(dim.p, dim.n, verbose=F) {
     return(sparseMatrix(i=nnzero.i, j=nnzero.j, dims=c(dim.n, dim.p)))
   } else {
     # 1. Pick non-zeros (and positions in the matrix)
-    nnzeros = 0.02 * L
+    nnzeros = 0.08 * L
     nnzero.pos = sample(L, size=nnzeros, replace=F)
     
     X = matrix(0, nrow=dim.n, ncol=dim.p)
@@ -82,6 +86,15 @@ create.dataset <- function(dim.p=1e2, dim.n=1e3) {
   }
 }
 
+remove.dataset <- function(dim.p, dim.n) {
+  filename = dataset.filename(dim.p, dim.n)
+  if(file.exists(filename)) {
+    unlink(filename)
+    beta.file = dataset.filename(dim.p, dim.n, beta.file=T)
+    unlink(beta.file)
+  }
+}
+
 vector.dist <- function(x, y) {
   if(length(x) != length(y))
     stop("Vectors should have equal length to calculate distance.")
@@ -103,8 +116,8 @@ load.dataset <- function(dim.p, dim.n) {
   return(df)
 }
 
-load.beta <- function(dim.p, dim.n) {
-  beta.filename = dataset.filename(dim.p, dim.n, beta.file=T)
+load.beta <- function(dim.p, dim.n, is.big=F) {
+  beta.filename = dataset.filename(dim.p, dim.n, beta.file=T, is.big=is.big)
   print(sprintf("> Loading ground-truth (beta vector) ..%s.", beta.filename))
-  return(as.numeric(read.csv(beta.filename, header=T)))
+  return(scan(beta.filename, skip=1, sep=",", nlines=1, quiet=T))
 }
