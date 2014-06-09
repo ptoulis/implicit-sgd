@@ -24,88 +24,80 @@ data.files <- list.files(path=DATA_DIR, full.names=T, pattern="bz2")
 ## along with this program; if not, write to the Free Software
 ## Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 ###############################################################################
-
+ 
 ## NOTE: Before the function `fitSingleCity' can be used, the data
 ## must be preprocessed using the `basicNMMAPS' function in the
 ## `NMMAPSdata' package.  Type `?basicNMMAPS' after loading the
 ## `NMMAPSdata' package into R for more information.  `fitSingleCity'
 ## will not work correctly with the full/raw database.
-
+rm(list=ls())
 
 library(splines)
 
-fitSingleCity <- function(data, pollutant = "l1pm10tmean", cause = "death",
-                          dfyr.Time = 7, pdfyr.time = 0.15, df.Temp = 6,
-                          df.Dew = 3, extractors = NULL) {
-  ## Argument checking
-  stopifnot(is.character(pollutant), is.character(cause), length(cause) == 1)
-  
-  ## Modify degrees of freedom based on missingness of data
-  sub <- data[, c("time", "agecat", "dow", "tmpd", "rmtmpd", "dptp",
-                  "rmdptp", cause, pollutant)]
-  subset <- complete.cases(sub)
-  df.Time <- round( numdf(subset, dfyr.Time) )
-  df.time <- round( df.Time * pdfyr.time )
-  
-  ## Don't setup smooth function of time where there are incomplete cases
-  is.na(data[, "time"]) <- !subset
-  
-  modelFormula <- setupFormula(cause, pollutant, df.Time, df.time,
-                               df.Temp, df.Dew)
-  print(modelFormula)
-  ## Fit the model!
-  fit <- glm(modelFormula, family = quasipoisson, data = data,
-             control = glm.control(epsilon = 1e-10, maxit = 1000),
-             na.action = na.omit)
-  
-  ## Extract information from the fitted glm model object using the
-  ## list of functions in `extractors'.  If no extractors are
-  ## specified, just return the entire fitted model object.
-  rval <- if(is.null(extractors))
-    fit
-  else 
-    lapply(extractors, function(f) f(fit))
-  invisible(rval)
-  return(fit)
+merge.all.data <- function() {
+  data.nmmaps = NULL
+  files = list.files("~/A/data/nmmaps/", pattern="bz2", full.names=T)
+  print(sprintf("There are %d files.", length(files)))
+  for(i in 1:length(files)) {
+    file = files[i]
+    m = regexec(pattern="(\\w+)\\.rda", text=file)
+    df.name = regmatches(file, m)[[1]][2]
+    print(sprintf("Loading object %s -- Total files %d/%d", df.name, i, length(files)))
+    # 1. Load the .rda file for a specific city
+    load(file)
+    # 2a. Fix the dataset
+    df = get(df.name)
+    df = fixData(df)
+    if(!is.null(df)) {
+      # 2b. Bind to big data file if it is ok.
+      data.nmmaps = rbind(data.nmmaps, df)
+    } else {
+      print(sprintf("Dataset %s was NOT added..", file))
+    }
+    # 3. Clear some memory
+    rm(df)
+    rm(df.name)
+    gc()
+    print(object.size(data.nmmaps), units="Mb")
+  } 
+  return(data.nmmaps)
 }
 
-setupFormula <- function(cause, pollutant, df.Time, df.time, df.Temp, df.Dew) {
-  covariates.f <- paste(cause, "~ dow + agecat")
-  
-  ## Smooth functions of temperature and dew points (w/running means)
-  weather.f <- paste(c(paste("ns(tmpd,", df.Temp, ")"),
-                       paste("ns(rmtmpd,", df.Temp, ")"),
-                       paste("ns(dptp,", df.Dew, ")"),
-                       paste("ns(rmdptp,", df.Dew, ")")), 
-                     collapse = "+")
-  poll.f <- paste(pollutant, collapse = "+")
-  ## Smooth function(s) of time; separate ones for age categories 2, 3
-  time.f <- paste(c(paste("ns(time,", df.Time, ")"),
-                    paste("I(ns(time,", df.time, ")*Age2Ind)"),
-                    paste("I(ns(time,", df.time, ")*Age3Ind)")),
-                  collapse = "+")
-  form.str <- paste(c(covariates.f, time.f, weather.f, poll.f),
-                    collapse = "+")
-  as.formula(form.str)
+as.design <- function(df) {
+  X = matrix(0, nrow=nrow(df), ncol=0)
+  #days = seq(2, 7)
+  #X = cbind(X, matrix(sapply(df$dow, function(i) days==i), nrow=length(df$dow), byrow=T))
+  #X = cbind(X, df$agecat==1)
+  #X = cbind(X, df$agecat==2)
+  cities = unique(df$city)
+  print(cities)
+  save(cities, file="cities.rda")
+  pollute = df$o3median * df$tmpd
+  print("> Fitting cubic spline to pollute var...")
+  ns.pollute = ns(pollute, 100)
+  # Monitor progress
+  print("> Binding time cubic spline (dimension 400)...")
+  X = cbind(X, ns(df$time, 400))
+  print("> Binding Age 1 cubic spline (dimension 100)...")
+  X = cbind(X, ns.pollute * (1-df$Age2Ind) * (1-df$Age3Ind))
+  print("> Binding Age 2 cubic spline (dimension 100)...")
+  X = cbind(X, ns.pollute * df$Age2Ind)
+  print("> Binding Age 3 cubic spline (dimension 100)...")
+  X = cbind(X, ns.pollute * df$Age3Ind)
+  print(sprintf("> Binding Cities (dimension %d)...", length(cities)))
+  X = cbind(X, matrix(sapply(df$city, function(i) as.numeric(cities==i)), 
+                      nrow=length(df$city), byrow=T))
+  X = cbind(X, df$death)
+  print("> Setting column names..")
+  cols <-   c(paste("t", 1:400, sep=""),
+              paste("age1_pollute", 1:100, sep=""),
+              paste("age2_pollute", 1:100, sep=""),
+              paste("age3_pollute", 1:100, sep=""),
+              paste("city", 1:length(cities), sep=""),
+              "death")
+  colnames(X) = cols
+  return(X)
 }
-
-## Return a discounted df (based on 12 consecutive days of missings)
-
-numdf <- function(usedata, num = 7){
-  n <- length(usedata)
-  use <- usedata[1:(n/3)]        
-  ll  <- round(length(use)/12)
-  
-  ## this is to eliminate the warning message the length of use is
-  ## not a multiple of 12
-  usenew <- use[1:(ll*12)]
-  
-  mat <- matrix(usenew, ncol = 12,byrow = TRUE)
-  m   <- sum(ceiling(apply(mat, 1, sum, na.rm = TRUE)/12)) ##-365.25/12   
-  df  <- round(12*m/365.25*num)   
-  max(1, df)
-}
-
 fixData <- function(dataframe) {
   if (all(is.na(dataframe[, "pm10tmean"])))
     return(NULL)
@@ -116,8 +108,98 @@ fixData <- function(dataframe) {
   Age3Ind <- as.numeric(dataframe[, "agecat"] == 3)
   dataframe[, "dow"] <- as.factor(dataframe[, "dow"])
   dataframe[, "agecat"] <- as.factor(dataframe[, "agecat"])
-  varList <- c("cvd", "death", "resp", "tmpd", "rmtmpd", "dptp",
-               "rmdptp", "time", "agecat", "dow", "pm10tmean", paste("l",
-                                                                     1:7, "pm10tmean", sep = ""))
-  data.frame(dataframe[, varList], Age2Ind = Age2Ind, Age3Ind = Age3Ind)
+  #   varList <- c("cvd", "death", "resp", "tmpd", "rmtmpd", "dptp",
+  #                "rmdptp", "time", "agecat", "dow", "pm10tmean", "o3mean",
+  #                paste("l", 1:7, "pm10tmean", sep = ""))
+  varList <- c("city", "death", "tmpd", "o3median", "time")
+  df = data.frame(dataframe[, varList], Age2Ind = Age2Ind, Age3Ind = Age3Ind)
+  ma <- function(x, n=4) { 
+    filter(x, rep(1/n,n), sides=1)
+    x[1:(n-1)] <- x[n]
+  }
+  filter.vars = c("o3mean", "tmpd")
+  # simple imputation2
+  for(f in names(df)) {
+    y = df[[f]]
+    x = which(is.na(y))
+    if(length(x) > 0) {
+      # 
+      df[[f]][x] <- mean(y, na.rm=T)
+      # if temperature or O3, take a running average.
+      if(f %in% filter.vars) {
+        z = df[[f]]
+        df[[f]] <- (z-mean(z))/sd(z)
+      }
+    }
+  }
+  if(sum(is.na(df))) {
+    warning("Some columns still have NA values..")
+    return(NULL)
+  }
+  return(df)
+}
+
+
+fit.all.implicit <- function(X) {
+  n = nrow(X)
+  p = ncol(X) - 1 # last column is response.
+  cov.i = 1:p
+  theta.hat = rep(0, p)
+  a.optimal = 1800.0
+  solve.implicit <- function(y, theta, a, x, x.norm, B) {
+    if(B[1] == B[2]) return(B[1])
+    eta = sum(theta * x)
+    f = function(z) {
+      z - a * (y - exp(eta + x.norm * z))
+    }
+    uniroot(f, interval=B)$root
+  }
+  pb = txtProgressBar(style=3)
+  for(i in 1:n) {
+    xi = as.numeric(X[i, cov.i])
+    yi = as.numeric(X[i, p+1])
+    yi.pred = exp(sum(theta.hat * xi))
+    ai = 1 / (1 + (1/a.optimal) * i)
+    
+    ri = ai * (yi - yi.pred)
+    Bi = c(0, ri)
+
+    if(ri <= 0)
+      Bi = c(ri, 0)
+    
+    ksi = solve.implicit(yi, theta.hat, ai, xi, sum(xi^2), Bi)
+    theta.hat = theta.hat + ksi * xi
+    setTxtProgressBar(pb, i/n)
+  }
+  return(theta.hat)
+}
+
+run.benchmark <- function(data.size="small") {
+  print(sprintf("Loading data...(size=%s)", data.size))
+  if(data.size=="small") {
+    print("> Running small dataset..")
+    load("datasets/X.small.rda")
+    print(sprintf("> Design matrix X: %d obs. %d covariates. Memory Size=%.1f Mb", 
+                  nrow(X.small), ncol(X.small), object.size(X.small) / (1024 * 1024)))
+    
+    df = as.data.frame(X.small)
+    df$death = as.integer(df$death)
+    print("> Running glm()...")
+    fit = glm(death ~ . + 0, family=poisson, data=df)
+    b1 = as.numeric(coef(fit))
+    print("> Running implicit...")
+    b2 = fit.all.implicit(X.small)
+    print(sprintf("MSE = %.3f", sqrt(mean((b1-b2)^2))))
+    plot(b1, b2, pch=20, xlab="lm() parameters", ylab="implicit estimates")
+    lines(b1, b1, col="red", lty=3, lwd=0.5) 
+  } else if(data.size=="big") {
+    load("datasets/X.all.rda")
+    print(sprintf("> Design matrix X: %d obs. %d covariates. Memory Size=%.1f Mb", 
+                  nrow(X.all), ncol(X.all), object.size(X.all) / (1024 * 1024)))
+    print("> Fit using the implicit sgd method.")
+    f = system.time({ betas = fit.all.implicit(X.all) })
+    print(sprintf("Elapsed time %.2f seconds..", f[["elapsed"]]))
+  } else {
+    stop("Data size should be in {small, big}")
+  }
 }

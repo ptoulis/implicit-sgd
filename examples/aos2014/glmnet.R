@@ -7,6 +7,8 @@ rm(list=ls())
 library(mvtnorm)
 library(glmnet)
 
+# genjerry, genx2 are functions taken from the above paper.
+#
 genjerry = function(x,snr){
   # generate data according to Friedman's setup
   n=nrow(x)
