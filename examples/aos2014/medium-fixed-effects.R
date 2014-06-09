@@ -163,6 +163,7 @@ run.experiment.one <- function(dim.p.vector=seq(1e1, 250, by=10),
   colnames(results) = c("p", "n", as.character(sapply(methods, function(m) str_c(metrics, m))))
   
   for(i in 1:nsamples) {
+    print(sprintf(">> Iteration %d / %d", i, nsamples))
     n = sample(dim.n.vector, size=1)
     p = sample(dim.p.vector, size=1)
     filename = dataset.filename(n, p)
