@@ -2,6 +2,8 @@
 out/*
 *Rdata
 *RData
+*.rda
+datasets/*
 *.sh
 *png
 *zip
