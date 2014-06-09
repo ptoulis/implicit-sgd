@@ -15,6 +15,9 @@ run.biglm <- function(dim.p, dim.n) {
   dt = f[["elapsed"]]
   #  Does this overflow the RAM?
   # summary(glm(payment ~ sex + age + place.served, data = x[,c("payment","sex","age","place.served")]))
+  true.beta = load.beta(dim.p, dim.n, is.big=T)
+  mse = vector.dist(true.beta, as.numeric(coef(mymodel)))
+  print(sprintf("Big GLM time=%.2f secs and MSE=%.2f", dt, mse))
   return(list(time=dt, beta.hat=beta.hat, 
               mse=vector.dist(beta.hat, load.beta(dim.p, dim.n, is.big=T))))
 }
@@ -45,7 +48,7 @@ run.sgd <- function(dim.p, dim.n) {
   m = length(chunks$start)
   chunks$len = rep(chunkSize, m)
   chunks$len[m] = nrows-chunks$start[m] + 1
-  print(chunks)
+  print(sprintf("> Total read chunks for SGD = %d", m))
   # 3. Prepare the variables for the main loop.
   n.all = nrows
   p.all = ncol(x) - 1
@@ -117,7 +120,7 @@ run.sgd <- function(dim.p, dim.n) {
         XXt = (1/nonzero.iter) * ((nonzero.iter-1) * XXt + xi %*% t(xi))
         a.new = get.alpha.optimal(XXt)
         # print(sprintf("New optimal a=%.3f", a.new))
-        if(abs(a.new - a.optimal) < 1e-2 && a.new != 9.99) {
+        if(abs(a.new - a.optimal) < 5e-2 && a.new != 9.99) {
           update.alpha = F
           print(sprintf("> Best alpha reached at iteration %d...%.3f", 
                         nonzero.iter, a.optimal))
@@ -137,19 +140,22 @@ run.sgd <- function(dim.p, dim.n) {
     print(sprintf("MSE so far %.2f", vector.dist(true.beta, beta.new)))
   }
   t1 = proc.time()[["elapsed"]]
-  # print(sprintf("SGD with chunked access %.1f secs", t1-t0))
+  mse = vector.dist(beta.new, true.beta)
+  print(sprintf("Implicit SGD with chunked access %.1f secs, MSE=%.2f", t1-t0, mse))
   return(list(time=t1-t0,
-              mse=vector.dist(beta.new, true.beta), 
+              mse=mse,
               beta.hat=beta.new))
 }
 
-run.experiment.two <- function() {
-  run.biglm(1e1, 1e7)  # about 1min
-  run.sgd(1e1, dim.n=1e7) # about 5mins
+run.big.experiment <- function(p=1e2, n=1e6) {
+  y = run.biglm(p, n)  # about 1min
+  print("")
+  print(">> Running Implicit...")
+  x = run.sgd(p, dim.n=n) # about 5mins
 }
 
 run.experiment.two <- function() {
-  run.biglm(1e4, 1e7) # about
-  run.sgd(1e5, dim.n=1e3) # about
+  # run.biglm(1e4, 1e4) # hangs.
+  run.sgd(dim.p=1e4, dim.n=1e4) # about
 }
 

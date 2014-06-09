@@ -77,7 +77,8 @@ mse <- function(x, y) {
     stop("MSE should compare vectors of same length")
   sqrt(mean((x-y)^2))
 }
-time.gaussian <- function(dim.n, dim.p,
+
+run.experiment.glmnet <- function(dim.n, dim.p,
                           rho.values=c(0.0, 0.1, 0.2),
                           nreps=3, 
                           methods=c("glmnet")) {
@@ -129,28 +130,28 @@ glmnet.wrapper=function(sx,ly,folds,lambda=lambda,standardize=FALSE,family="bino
   }
   return()
 }
-
-run.logit <- function(dim.n, dim.p,
-                      rho.values=c(0.0, 0.1, 0.2),
-                      nreps=3) {
-  timings = matrix(nrow=0, ncol=2)
-  colnames(timings) <- c("rho", "time")
-  nlam=100
-  nfolds=10
-  pb = txtProgressBar(style=3)
-  niters = 0
-  for(rho in rho.values) {
-    set.seed(22)
-    niters = niters + 1
-    dataset = sample.data(dim.n, dim.p, rho, model="logit")
-    x = dataset$X
-    y = dataset$Y
-    # make sure n is a multiple of nfolds=10
-    folds=sample(rep(1:nfolds, dim.n/nfolds))
-    fit2=glmnet(x,y,standardize=FALSE,family="binomial")
-    tim.fht=system.time(glmnet.wrapper(x,y,folds=folds,lam=fit2$lambda,standardize=FALSE,family="binomial"))[1]
-    timings = rbind(timings, c(rho, as.numeric(tim.fht)))
-    setTxtProgressBar(pb, niters/length(rho.values))
-  }
-  return(as.data.frame(timings))
-}
+# TODO(ptoulis): Have a logistic regression example?
+# run.logit <- function(dim.n, dim.p,
+#                       rho.values=c(0.0, 0.1, 0.2),
+#                       nreps=3) {
+#   timings = matrix(nrow=0, ncol=2)
+#   colnames(timings) <- c("rho", "time")
+#   nlam=100
+#   nfolds=10
+#   pb = txtProgressBar(style=3)
+#   niters = 0
+#   for(rho in rho.values) {
+#     set.seed(22)
+#     niters = niters + 1
+#     dataset = sample.data(dim.n, dim.p, rho, model="logit")
+#     x = dataset$X
+#     y = dataset$Y
+#     # make sure n is a multiple of nfolds=10
+#     folds=sample(rep(1:nfolds, dim.n/nfolds))
+#     fit2=glmnet(x,y,standardize=FALSE,family="binomial")
+#     tim.fht=system.time(glmnet.wrapper(x,y,folds=folds,lam=fit2$lambda,standardize=FALSE,family="binomial"))[1]
+#     timings = rbind(timings, c(rho, as.numeric(tim.fht)))
+#     setTxtProgressBar(pb, niters/length(rho.values))
+#   }
+#   return(as.data.frame(timings))
+# }

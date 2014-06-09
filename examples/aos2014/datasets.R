@@ -56,9 +56,9 @@ sample.X <- function(dim.p, dim.n, verbose=F) {
   }
 }
 
-create.dataset <- function(dim.p=1e2, dim.n=1e3) {
-  filename = dataset.filename(dim.p, dim.n)
-  beta.filename = dataset.filename(dim.p, dim.n, beta.file=T)
+create.dataset <- function(dim.p=1e2, dim.n=1e3, is.big=F) {
+  filename = dataset.filename(dim.p, dim.n, is.big=is.big)
+  beta.filename = dataset.filename(dim.p, dim.n, beta.file=T, is.big=is.big)
   chunk = dim.n / 50
   beta = sample.beta(dim.p)
   write.table(matrix(beta, nrow=1), file=beta.filename, sep=",", 

@@ -152,7 +152,7 @@ analyze.dataset.sgd <- function(dataset) {
 
 
 ## Main function to create the benchmark
-run.experiment.one <- function(dim.p.vector=seq(1e1, 250, by=10),
+run.small.experiment <- function(dim.p.vector=seq(1e1, 250, by=10),
                           dim.n.vector=seq(1e2, 1e5, by=1e3),
                           methods=c("glm", "sgd"),
                           nsamples=5,

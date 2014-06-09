@@ -174,7 +174,7 @@ fit.all.implicit <- function(X) {
   return(theta.hat)
 }
 
-run.benchmark <- function(data.size="small") {
+run.experiment.nmmaps <- function(data.size="small") {
   print(sprintf("Loading data...(size=%s)", data.size))
   if(data.size=="small") {
     print("> Running small dataset..")
