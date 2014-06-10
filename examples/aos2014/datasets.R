@@ -59,19 +59,23 @@ sample.X <- function(dim.p, dim.n, verbose=F) {
 create.dataset <- function(dim.p=1e2, dim.n=1e3, is.big=F) {
   filename = dataset.filename(dim.p, dim.n, is.big=is.big)
   beta.filename = dataset.filename(dim.p, dim.n, beta.file=T, is.big=is.big)
-  chunk = dim.n / 50
+  chunk = as.integer(dim.n / 50)
   beta = sample.beta(dim.p)
   write.table(matrix(beta, nrow=1), file=beta.filename, sep=",", 
               row.names=F, col.names=sapply(1:dim.p, function(i) sprintf("b%d", i)))
   print("> Saved beta vector to file..")
   cnames = sapply(1:dim.p, function(i) sprintf("X%d", i))
   cnames = c(cnames, "Y")
-  imax = dim.n / chunk
+  
+  imax = as.integer(dim.n / chunk)
   print(sprintf("> Need to iterate save-file %d times", imax))
   pb = txtProgressBar(style=3)
-  
   sigma = 1
+  rows.saved = 0
   for(i in 1:imax) {
+    if(i==imax) {
+      chunk = dim.n - rows.saved
+    }
     X = sample.X(dim.p=dim.p, dim.n=chunk)
     y = round(X %*% beta + rnorm(chunk, sd=sigma), 3)
     X = cbind(X, y)
@@ -83,6 +87,7 @@ create.dataset <- function(dim.p=1e2, dim.n=1e3, is.big=F) {
       write.table(X, file=filename, row.names=F, col.names=F, append=T, sep=",")
     }
     setTxtProgressBar(pb, value=i/imax)
+    rows.saved = rows.saved + chunk
   }
 }
 

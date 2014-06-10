@@ -152,22 +152,23 @@ analyze.dataset.sgd <- function(dataset) {
 
 
 ## Main function to create the benchmark
-run.small.experiment <- function(dim.p.vector=seq(1e1, 250, by=10),
-                          dim.n.vector=seq(1e2, 1e5, by=1e3),
+run.small.experiment <- function(dim.p.vector=seq(10, 500),
+                          dim.n.vector=seq(100, 50000),
                           methods=c("glm", "sgd"),
                           nsamples=5,
-                          results.file="results-experiment-one.csv") {
+                          results.file="datasets/results/results.small.experiment.rda") {
   require(stringr)
   results = matrix(0, nrow=0, ncol=6)
   metrics = c("time.", "mse.")
   colnames(results) = c("p", "n", as.character(sapply(methods, function(m) str_c(metrics, m))))
   
   for(i in 1:nsamples) {
-    print(sprintf(">> Iteration %d / %d", i, nsamples))
     n = sample(dim.n.vector, size=1)
     p = sample(dim.p.vector, size=1)
-    filename = dataset.filename(n, p)
-    create.dataset(p, n)
+    print(sprintf(">> Iteration %d / %d --> Experiment (%d, %d)", 
+                  i, nsamples, p, n))
+    # filename = dataset.filename(dim.p=p, dim.n=n)
+    create.dataset(dim.p=p, dim.n=n)
     out.row = c(p, n)
     for(m in 1:length(methods)) {
       method = methods[m]
@@ -178,11 +179,40 @@ run.small.experiment <- function(dim.p.vector=seq(1e1, 250, by=10),
     results = rbind(results, out.row)
     rownames(results) <- NULL
     remove.dataset(p, n)
-    write.csv(results, file=results.file)
+    ## Save results
+    res.small.exp = as.data.frame(results)
+    save(res.small.exp, file=results.file)
   }
   return(results)
 }
 
+results.small.experiment <- function() {
+  load("datasets/results/results.small.experiment.rda")
+  
+  add.monomial <- function(arg.df, p.k, n.k) {
+    original.cols = names(arg.df)
+    grid = matrix(c(arg.df$p, arg.df$n), nrow=nrow(arg.df), byrow=F)
+    m = as.numeric(apply(grid, 1, function(row) row[1]**p.k * row[2]**n.k))
+    mono.name = sprintf("p%dn%d", p.k, n.k)
+    arg.df[[mono.name]] = m
+    return(arg.df)
+  }
+  
+  df = as.data.frame(res.small.exp)
+  df = subset(df, select=c("p", "n", "time.sgd", "time.glm")) 
+  P = poly(df$p, 3)  # obs x 3
+  Nmatrix = matrix(df$n, nrow=nrow(P), ncol=ncol(P), byrow=F)
+  P = P * Nmatrix
+  print(head(P))
+  # 1. regression for glm() performance
+  for(n.power in c(0.5, 1, 1.5, 2.0)) {
+    for(p.power in c(1, 1.4, 2, 2.3, 3)) {
+      P = (df$n**n.power) * (df$p**p.power)
+      fit = lm(df$time.sgd ~ P)
+      print(sprintf("p=%.1f n=%.1f,  RSME=%.2f", p.power, n.power, sqrt(mean(fit$residuals^2))))
+    }
+  }
+}
 
 
 
