@@ -1,161 +1,188 @@
-## big glm example
+# Copyright (c) 2013
+# Panos Toulis, ptoulis@fas.harvard.edu
+#
+# Experiments with big datasets (roughly N * p > 1e9)
+# Dataset filenames are defined by dataset.filename() function of datasets.R
+# These are stored by default in ./datasets/big 
+# 
+# Synopsis:
+#     run.big.experiment(1e2, 1e5)
+#
+#  This runs both biglm() and implicit SGD on the dataset with p=1e2 params
+#   and N = 1e5 observations.
+#
 rm(list=ls())
 library(ff)
 require(biglm)
 source("medium-fixed-effects.R")
 
 run.biglm <- function(dim.p, dim.n) {
-  # Use biglm
+  # Runs biglm() on the dataset(dim.p, dim.n) using ff package.
+  #
+  # Returns (time, mse, beta.hat) as a list.
+  #
   filename = dataset.filename(dim.p, dim.n, is.big=T)
   print(sprintf("> Loading data from %s", filename))
-  df = read.csv.ffdf(file=filename, header=T, first.rows=50000, next.rows=100000)
-  print("Data loaded..")
+  # TODO(ptoulis): Haven't found some values that are consistently good across datasets.
+  df = read.csv.ffdf(file=filename, header=T, first.rows=10000, next.rows=10000)
+  print("> Data loaded..")
+  # 1. Fit biglm() using the ffdf frame (loads data successively from the disk)
   f = system.time({ mymodel <- biglm(terms(Y ~ 0 + ., data=df), data = df) })
+  # 2. Get the estimates.
   beta.hat = as.numeric(coef(mymodel))
+  # 3. Elapsed time.
   dt = f[["elapsed"]]
-  #  Does this overflow the RAM?
-  # summary(glm(payment ~ sex + age + place.served, data = x[,c("payment","sex","age","place.served")]))
+  # Get ground-truth
   true.beta = load.beta(dim.p, dim.n, is.big=T)
+  # 4.. and compute metrics.
   mse = vector.dist(true.beta, as.numeric(coef(mymodel)))
-  print(sprintf("Big GLM time=%.2f secs and MSE=%.2f", dt, mse))
+  print(sprintf("Big GLM time=%.2f secs and MSE=%.4f", dt, mse))
   return(list(time=dt, beta.hat=beta.hat, 
               mse=vector.dist(beta.hat, load.beta(dim.p, dim.n, is.big=T))))
 }
 
-run.sgd <- function(dim.p, dim.n) {
-  # 1. Find total number of rows.
+run.implicit.sgd <- function(dim.p, dim.n) {
+  # Runs implicit SGD on the dataset(p, n)
+  # The dataset is read is chunks. The # and size of chunks is 
+  # determined heuristically in a very crude way (roughly chunk size ~ 1Gb)
+  # TODO(ptoulis): Better strategy is possible here.
+  # The chunks are fed to the implicit SGD algorithm one-by-one.
+  # In small p, we check for sparsity and remove rows that include 
+  # only the intercept term, and make the update at once.
+  # 
+  # The optimal learning rate is determined by sub-sampling the data.
+  # This assumes that the no. of covariates p is small-ish (e.g. 1e3)
+  # 
+  # Rprof(filename="sgd.profile.txt") -- if we need profiling
   filename = dataset.filename(dim.p, dim.n, is.big=T)
   print(sprintf("> Loading data from %s", filename))
+  # 1. Get the no. of rows (N) in the dataset
+  if(Sys.info()["sysname"] != "Linux") {
+    stop("This is supposed to run on a Linux machine. Quitting..")
+  }
   cmd.out = system(sprintf("wc -l %s", filename), intern=T)
   nrows = as.numeric(unlist(regmatches(cmd.out, regexpr("\\d+", cmd.out)))) - 1
 
   read.matrix <- function(start, nlines) {
-    # print(sprintf("> Reading from=%d total=%d lines", start, nlines))
+    # Function to read the dataset in chunks.
+    # (start, nlines) determine where to start reading (#line) and 
+    # how many lines to read respectively.
+    print(sprintf("> Reading file=%s from=%d total=%d lines",
+                  filename, start, nlines))
     return(matrix(scan(filename, skip=start-1, sep=",", nlines=nlines, quiet=T), 
                   nrow=nlines, byrow=T))
   }
   
-  # 2. Data file storage/access statistics.
-  nReadRows = 50
-  f = system.time({x = read.matrix(2, nReadRows)})
+  # 2. Determined how many chunks we need to read.
+  nReadRows = 50 # sample that many rows.
+  f = system.time({x = read.matrix(2, nReadRows)}) # time access to sample rows
   rowSize = object.size(x) / nReadRows
   rowSpeed = max(0.1, 1000 * f[["elapsed"]] / nReadRows)
-  availableRAM = 1024 * 1024**2
-  chunkSize = floor(availableRAM / as.numeric(rowSize))
+  availableRAM = 1024* 1024**2
+  chunkSize = floor(availableRAM / as.numeric(rowSize))  # chunk size
   print(sprintf("> File has %d rows with %.2f kB/row read at %f sec/1k row. Chunk size can be %d. Chunks=", 
-                nrows, rowSize/1024,  rowSpeed, floor(chunkSize)))
+                nrows, rowSize/1024,  rowSpeed, floor(chunkSize))) # chunks
   chunks = list(start=seq(2, nrows, by=chunkSize))
-  m = length(chunks$start)
-  chunks$len = rep(chunkSize, m)
-  chunks$len[m] = nrows-chunks$start[m] + 1
-  print(sprintf("> Total read chunks for SGD = %d", m))
-  # 3. Prepare the variables for the main loop.
-  n.all = nrows
-  p.all = ncol(x) - 1
-  beta.old = rep(0, p.all)
-  beta.new = rep(0, p.all)
+  nChunks = length(chunks$start)  # total number of chunks
+  chunks$len = rep(chunkSize, nChunks)
+  chunks$len[nChunks] = nrows-chunks$start[nChunks] + 1
+  print(sprintf("> Total read chunks for SGD = %d", nChunks))
+  
+  # 3. Prepare the variables for the main loop = (p, beta.old, beta,new)
+  p = ncol(x) - 1
+  beta.old = rep(0, p)
+  beta.new = rep(0, p)
   true.beta = load.beta(dim.p, dim.n, is.big=T)
-  # print(sprintf("> Setting learning rates."))
-  # 1. Pick the optimal learning rate:
-  # By (Toulis et.al., 2014) the variance will be
-  # V = a^2 f^2 (2af J - I)^-1 * J
-  #  where a=learning rate, f=dispersion param=Var(y), J=fisher information, I=identity matrix.
-  #  But in this model J = (1/f) E(xx') = (1/f) q I  where q=P(xi=1)
-  #  and so, f * J = q I.  Thus the variance is V = f * q * (a^2) / (2aq-1) I
-  # To minimize variance we thus need to minimize a^2 / (2aq-1)
-  # which leads to a.opt = 1/q. If we assume a_n = 1 / (1 + h * n) then
-  # clearly a_n * n -> a = 1/h and thus we need to set h=q=1/a for the optimal value.
-  #
-  q.hat=0.0
-  iter = 0
-  pb = txtProgressBar(style=3)
-  ## Main SGD loop
-  t0 = proc.time()[["elapsed"]]
-  use.explicit = F # what method to use
-  print(sprintf("> Using %s updates in SGD. ",
-                ifelse(use.explicit, "explicit", "implicit")))
-  nonzero.iter = 0
-  for(h in 1:length(chunks$start)) {
-    print(">> Reading data chunk. Please wait...")
-    X = read.matrix(chunks$start[h], chunks$len[h])
-    Y = as.vector(X[, p.all+1])
-    X = X[, 1:p.all]
-    Sx = rowSums(X)
-    n = nrow(X) # re-define n=#obs and p=#covariates in this chunk.
-    p = ncol(X)
-    # 5. Fast update for the intercept
-    only.intercept.i = which(Sx==1)
-    # print(sprintf("Total %d / %d lines with intercept only.", length(only.intercept.i), n))
-    if(length(only.intercept.i) > 0) {
-      iter = iter + length(only.intercept.i)
-      beta.old[1] = mean(Y[only.intercept.i])
-      print(sprintf("> Start with Intercept=%.3f", beta.new[1]))
-      # 4. Find optimal a
-      X = X[-only.intercept.i, ]
-      Y = Y[-only.intercept.i]
-      n = nrow(X)
-    }
+  update.alpha.once = T
+  alpha.optimal = 1
 
-    # q.hat = (1/h) * ((h-1) * q.hat + (sum(X) - 2 * n) / (n * (p-2)))
-    # a.optimal = solve.best.alpha(q.hat, p=p)
-    # print(sprintf("n=%d q.hat = %.3f -- Optimal a = %.3f", n, q.hat, a.optimal))
-    XXt = 0
-    a.optimal = 10
-    update.alpha = T
-    get.alpha.optimal <- function(J) {
-      lambdas = eigen(J)$values
-      lambdas = lambdas[lambdas > 0]
-      if(min(lambdas) < 1e-10) return(9.99)  # hope this is because sample is small.
-      optim(par=0, fn=function(x) sum(x^2 * lambdas / (2 * x * lambdas-1)),
-            method="L-BFGS-B", lower=1/(2*min(lambdas)) + 1e-5)$par
+  # 4. Define timing and other iteration counters.
+  chunk.times = c()  # times to analyze each chunk
+  learning.rate.times = c() # times to compute optimal rate for each chunk
+  nTotalIters = 0
+  
+  # 5. Main loop : Load chunk h and then iterate the data
+  for(h in 1:length(chunks$start)) {
+    print("")
+    print(">> Reading new chunk..Please wait...")
+    D = read.matrix(chunks$start[h], chunks$len[h])
+    print(sprintf("> Data chunk %d/%d read. Calculating sums/means ...etc",
+                  h, nChunks))
+    x.vars = 1:p
+    Sx = rowSums(D[, x.vars]) # take only the sums of the X's
+    
+    t0 = proc.time()[["elapsed"]]
+    # 5a. Fast update for the intercept i.e., xi = (1 0 0 0 0...)
+    only.intercept.i = which(Sx==1)
+    if(length(only.intercept.i) > 0) {
+      w1 = length(only.intercept.i)
+      w2 = nTotalIters
+      beta.old[1] = (w1 * mean(D[only.intercept.i, p+1]) + w2 * beta.old[1]) / (w1 + w2)
+      print(sprintf("Setting b1=%.3f", beta.old[1]))
     }
     
-    for(i in 1:n) {
-      nonzero.iter = nonzero.iter + 1
-      iter = iter + 1
-      xi = X[i, ] # current covariate vector
-      yi = Y[i]
-      Yi.pred = sum(beta.old * xi)
-      if(update.alpha) {
-        XXt = (1/nonzero.iter) * ((nonzero.iter-1) * XXt + xi %*% t(xi))
-        a.new = get.alpha.optimal(XXt)
-        # print(sprintf("New optimal a=%.3f", a.new))
-        if(abs(a.new - a.optimal) < 5e-2 && a.new != 9.99) {
-          update.alpha = F
-          print(sprintf("> Best alpha reached at iteration %d...%.3f", 
-                        nonzero.iter, a.optimal))
-        }
-        a.optimal = a.new
+    # 5b. "good examples" = those who do not only "inform" on the intercept.
+    good.examples = setdiff(seq(1, nrow(D)), only.intercept.i)
+    nTotalIters = nTotalIters + length(only.intercept.i)
+    print(sprintf("> Removed %d lines..", length(only.intercept.i)))
+    
+    # 5c. Determine optimal learning rate for this chunk.
+    #     Sample 10000 rows and then calculate E(x x') and the eigenvalues.
+    if(h==1 || !update.alpha.once) {
+      print("> Calculating optimal learning rate.")
+      lr.t0 = proc.time()[["elapsed"]]
+      J = matrix(0, nrow=p, ncol=p)
+      ntrials = min(as.integer(0.1 * nrow(D)), 5000)
+      D.samples = D[sample(1:nrow(D), size=ntrials, replace=F), ]
+      for(i in 1:ntrials) {
+        x = c(1, sample(c(1, rbinom(p-2, size=1, prob=0.08))))
+        J = (1/i) * ((i-1) * J + x %*% t(x))
       }
-      ai = 1 / (1 + (1/a.optimal) * nonzero.iter)
-      if(use.explicit) {
-        beta.new = beta.old + ai * (yi - Yi.pred) * xi      
-      } else {
-        ksi = ai * (yi - Yi.pred) / (1 + sum(xi^2) * ai) 
-        beta.new = beta.old + ksi * xi # implicit sgd  
-      }
-      beta.old = beta.new
-      setTxtProgressBar(pb, value=iter/n.all)
+      alpha.optimal = best.alpha(J)
+      if(alpha.optimal < 1e-3)
+        warning("Learning rate is very small. Implicit SGD is potentially unstable.")
+      learning.rate.times = c(learning.rate.times, proc.time()[["elapsed"]] - lr.t0)
+      print(sprintf("Best alpha = %.1f. Fitting dataset...", alpha.optimal))
+    } else {
+      print(" > Skipping update of learning rate.")
     }
-    print(sprintf("MSE so far %.2f", vector.dist(true.beta, beta.new)))
+    # 5d. Main loop on "good examples" (see above)
+    for(i in good.examples) {
+      xi = D[i, x.vars] # current covariate vector
+      yi = D[i, p+1]
+      Yi.pred = sum(beta.old * xi)
+      ai = 1 / (1 + (1/alpha.optimal) * (i + nTotalIters))
+    
+      ksi = ai * (yi - Yi.pred) / (1 + sum(xi^2) * ai)
+      beta.new = beta.old + ksi * xi # implicit sgd update
+      beta.old = beta.new
+    }
+    # 5e. Update the count (nTotalIters = #all examples considered so far)
+    nTotalIters  = nTotalIters + length(good.examples)
+    
+    # 5f. Store times: (t1-t0) = time (secs) to process the current chunk
+    t1 = proc.time()[["elapsed"]]
+    chunk.times = c(chunk.times, t1-t0)
+    print(sprintf("MSE so far %.4f. Total Time =%.2f Learning-rate-Time=%.2f ETA=%.2f (secs)", 
+                  vector.dist(true.beta, beta.new), 
+                  sum(chunk.times),
+                  sum(learning.rate.times),
+                  sum(chunk.times) * nChunks / h))
   }
-  t1 = proc.time()[["elapsed"]]
+  # 6. Compute metrics and report.
   mse = vector.dist(beta.new, true.beta)
-  print(sprintf("Implicit SGD with chunked access %.1f secs, MSE=%.2f", t1-t0, mse))
-  return(list(time=t1-t0,
+  print(sprintf("Implicit SGD with chunked access %.2f secs, MSE=%.4f", sum(chunk.times), mse))
+  return(list(time=sum(chunk.times),
               mse=mse,
               beta.hat=beta.new))
 }
 
 run.big.experiment <- function(p=1e2, n=1e6) {
-  y = run.biglm(p, n)  # about 1min
+  # Wrapper function to run both biglm() and implicit SGD
+  #
+  print(">> Running biglm()")
+  y = run.biglm(p, n)
   print("")
   print(">> Running Implicit...")
-  x = run.sgd(p, dim.n=n) # about 5mins
+  x = run.implicit.sgd(p, dim.n=n) # about 5mins
 }
-
-run.experiment.two <- function() {
-  # run.biglm(1e4, 1e4) # hangs.
-  run.sgd(dim.p=1e4, dim.n=1e4) # about
-}
-

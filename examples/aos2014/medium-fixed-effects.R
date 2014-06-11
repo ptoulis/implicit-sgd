@@ -90,6 +90,14 @@ solve.best.alpha <- function(q.hat, p) {
   return(out$par)
 }
 
+best.alpha <- function(J) {
+  lambdas = eigen(J)$values
+  f = function(x) sum(x^2 * lambdas / (2 * x * lambdas - 1))
+  m = 1 / (2 * min(lambdas))
+  m = ifelse(is.finite(m), m, 0)
+  optim(par=c(0), fn=f, lower= m + 1e-4, upper=100, method="L-BFGS-B")$par
+}
+
 analyze.dataset.sgd <- function(dataset) {
   p = ncol(dataset) - 1
   n = nrow(dataset)
@@ -119,22 +127,12 @@ analyze.dataset.sgd <- function(dataset) {
                 ifelse(use.explicit, "explicit", "implicit")))
   pb = txtProgressBar(style=3)
   # J.est <- diag(p)
-  update.optimal.alpha = F
   q.hat = (sum(X) - n) / (n * (p-1))
   alpha.opt = solve.best.alpha(q.hat, p)
   print(sprintf("q.hat=%.3f -- Learning rate limit a = %.3f", q.hat, alpha.opt))
   for(i in 1:n) {
     xi = X[i, ] # current covariate vector
     yi = Y[i]
-    if(update.optimal.alpha) {
-      J.est = (1/i) * ((i-1) * J.est + xi %*% t(xi))
-      alpha.new = solve.best.a(S.hat=J.est)
-      if(abs(alpha.new - alpha.opt) < 1e-5) {
-        update.optimal.alpha = F
-        print(sprintf("Optimal alpha reached.."))
-      }
-      alpha.opt = alpha.new
-    }
     ai = 1 / (1 + (1/alpha.opt) * i)
     Yi.pred = sum(beta.old * xi)
     Si = sum(xi^2)
@@ -188,30 +186,37 @@ run.small.experiment <- function(dim.p.vector=seq(10, 500),
 
 results.small.experiment <- function() {
   load("datasets/results/results.small.experiment.rda")
+  df = res.small.exp
+  log.p = log(df$p)
+  log.n = log(df$n)
+  # 1. time GLM
+  fit = lm(log(df$time.glm) ~ log.p + log.n)
+  print("======   Time GLM() parameters (log p, log n)")
+  print(summary(fit))
   
-  add.monomial <- function(arg.df, p.k, n.k) {
-    original.cols = names(arg.df)
-    grid = matrix(c(arg.df$p, arg.df$n), nrow=nrow(arg.df), byrow=F)
-    m = as.numeric(apply(grid, 1, function(row) row[1]**p.k * row[2]**n.k))
-    mono.name = sprintf("p%dn%d", p.k, n.k)
-    arg.df[[mono.name]] = m
-    return(arg.df)
-  }
+  # 3. mse GLM
+  fit = lm(log(df$mse.glm) ~ log.p + log.n)
+  print("======   MSE GLM() parameters (log p, log n)")
+  print(summary(fit))
   
-  df = as.data.frame(res.small.exp)
-  df = subset(df, select=c("p", "n", "time.sgd", "time.glm")) 
-  P = poly(df$p, 3)  # obs x 3
-  Nmatrix = matrix(df$n, nrow=nrow(P), ncol=ncol(P), byrow=F)
-  P = P * Nmatrix
-  print(head(P))
-  # 1. regression for glm() performance
-  for(n.power in c(0.5, 1, 1.5, 2.0)) {
-    for(p.power in c(1, 1.4, 2, 2.3, 3)) {
-      P = (df$n**n.power) * (df$p**p.power)
-      fit = lm(df$time.sgd ~ P)
-      print(sprintf("p=%.1f n=%.1f,  RSME=%.2f", p.power, n.power, sqrt(mean(fit$residuals^2))))
-    }
-  }
+  # 2. time SGD
+  fit = lm(log(df$time.sgd) ~ log.p + log.n)
+  print("======   Time SGD() parameters (log p, log n)")
+  print(summary(fit))
+  
+  
+  # 4. mse SGD
+  fit = lm(log(df$mse.sgd) ~ log.p + log.n)
+  print("======   MSE SGD() parameters (log p, log n)")
+  print(summary(fit))
+  
+  ## average MSE difference
+  se = (df$mse.sgd - df$mse.glm) / df$mse.glm
+  avg.se = mean(se)
+  hist(se)
+  se = sd(replicate(1000, { x = sample(se, size=length(se), replace=T); mean(x)}))
+  print(sprintf("Difference MSE = %.2f (%.2f)", avg.se, 2 * se))
+  
 }
 
 
