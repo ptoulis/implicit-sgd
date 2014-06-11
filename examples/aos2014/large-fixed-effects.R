@@ -99,7 +99,7 @@ run.implicit.sgd <- function(dim.p, dim.n) {
   # 4. Define timing and other iteration counters.
   chunk.times = c()  # times to analyze each chunk
   learning.rate.times = c() # times to compute optimal rate for each chunk
-  nTotalIters = 0
+  nDatapoints = 0  # current data points fitted.
   
   # 5. Main loop : Load chunk h and then iterate the data
   for(h in 1:length(chunks$start)) {
@@ -116,14 +116,13 @@ run.implicit.sgd <- function(dim.p, dim.n) {
     only.intercept.i = which(Sx==1)
     if(length(only.intercept.i) > 0) {
       w1 = length(only.intercept.i)
-      w2 = nTotalIters
+      w2 = nDatapoints
       beta.old[1] = (w1 * mean(D[only.intercept.i, p+1]) + w2 * beta.old[1]) / (w1 + w2)
       print(sprintf("Setting b1=%.3f", beta.old[1]))
     }
     
     # 5b. "good examples" = those who do not only "inform" on the intercept.
     good.examples = setdiff(seq(1, nrow(D)), only.intercept.i)
-    nTotalIters = nTotalIters + length(only.intercept.i)
     print(sprintf("> Removed %d lines..", length(only.intercept.i)))
     
     # 5c. Determine optimal learning rate for this chunk.
@@ -144,21 +143,22 @@ run.implicit.sgd <- function(dim.p, dim.n) {
       learning.rate.times = c(learning.rate.times, proc.time()[["elapsed"]] - lr.t0)
       print(sprintf("Best alpha = %.1f. Fitting dataset...", alpha.optimal))
     } else {
-      print(" > Skipping update of learning rate.")
+      print("> Skipping update of learning rate.")
     }
     # 5d. Main loop on "good examples" (see above)
     for(i in good.examples) {
       xi = D[i, x.vars] # current covariate vector
       yi = D[i, p+1]
       Yi.pred = sum(beta.old * xi)
-      ai = 1 / (1 + (1/alpha.optimal) * (i + nTotalIters))
+      # learning rate -- need to shift by #datapoints already fit (because of chunks)
+      ai = 1 / (1 + (1/alpha.optimal) * (i + nDatapoints))
     
       ksi = ai * (yi - Yi.pred) / (1 + sum(xi^2) * ai)
       beta.new = beta.old + ksi * xi # implicit sgd update
       beta.old = beta.new
     }
-    # 5e. Update the count (nTotalIters = #all examples considered so far)
-    nTotalIters  = nTotalIters + length(good.examples)
+    # 5e. Update the count (nDatapoints = #all examples considered so far)
+    nDatapoints = nDatapoints + nrow(D)
     
     # 5f. Store times: (t1-t0) = time (secs) to process the current chunk
     t1 = proc.time()[["elapsed"]]
