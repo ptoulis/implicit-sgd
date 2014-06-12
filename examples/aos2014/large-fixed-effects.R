@@ -126,8 +126,9 @@ run.implicit.sgd <- function(dim.p, dim.n) {
     print(sprintf("> Removed %d lines..", length(only.intercept.i)))
     
     # 5c. Determine optimal learning rate for this chunk.
-    #     Sample 10000 rows and then calculate E(x x') and the eigenvalues.
-    if(h==1 || !update.alpha.once) {
+    #   Sample 10000 rows and then calculate E(x x') and the eigenvalues.
+    #   Enter only if p is relatively small.
+    if(p <= 1e3 && (h==1 || !update.alpha.once)) {
       print("> Calculating optimal learning rate.")
       lr.t0 = proc.time()[["elapsed"]]
       J = matrix(0, nrow=p, ncol=p)

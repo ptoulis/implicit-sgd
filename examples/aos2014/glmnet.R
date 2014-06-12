@@ -23,10 +23,10 @@ genjerry = function(x,snr){
 
 genx2 = function(n,p,rho){
   #    generate x's multivariate normal with equal corr rho
+  z=rnorm(n)
   if(abs(rho)<1){
     beta=sqrt(rho/(1-rho))
     x0=matrix(rnorm(n*p),ncol=p)
-    z=rnorm(n)
     A = matrix(z, nrow=n, ncol=p, byrow=F)
     x= beta * A + x0
   }
@@ -79,9 +79,9 @@ mse <- function(x, y) {
 }
 
 run.experiment.glmnet <- function(dim.n, dim.p,
-                          rho.values=c(0.0, 0.1, 0.2),
+                          rho.values=c(0.0, 0.2, 0.4, 0.6, 0.8),
                           nreps=3, 
-                          methods=c("glmnet")) {
+                          methods=c("glmnet", "sgd")) {
   niters = 0
   cols = c("rho", "rep", "time","mse", "method")
   timings = matrix(nrow=0, ncol=length(cols))
