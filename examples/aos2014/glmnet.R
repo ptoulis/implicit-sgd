@@ -4,8 +4,10 @@
 # Using the simulation setup as in glmnet JoSS paper(Friedman, Hastie, Tibshirani)
 # http://www.jstatsoft.org/v33/i01/
 rm(list=ls())
+source("datasets.R")
 library(mvtnorm)
 library(glmnet)
+library(plyr)
 
 # genjerry, genx2 are functions taken from the above paper.
 #
@@ -23,6 +25,9 @@ genjerry = function(x,snr){
 
 genx2 = function(n,p,rho){
   #    generate x's multivariate normal with equal corr rho
+  # Xi = b Z + Wi, and Z, Wi are independent normal.
+  # Then Var(Xi) = b^2 + 1
+  #  Cov(Xi, Xj) = b^2  and so cor(Xi, Xj) = b^2 / (1+b^2) = rho
   z=rnorm(n)
   if(abs(rho)<1){
     beta=sqrt(rho/(1-rho))
@@ -42,31 +47,71 @@ sample.data <- function(dim.n, dim.p, rho,
   d = genjerry(X, 3)
   beta = d$beta
   Y = d$y
-  if(model=="logit") {
+  if(model=="logistic") {
     Y = as.vector(1* (runif(dim.n) < 1/(1 + exp(-Y))))
   }
   return(list(Y=Y, X=X, beta=beta))
 }
 
 optimal.alpha <- function(p, rho) {
-  lambdas = c(1 + (p-1) * rho, rep(1-rho, p-1))
+  b = sqrt(rho / (1-rho))
+  lambdas = c(p * b^2 + 1, rep(1, p-1))
   f = function(x) sum(x^2 * lambdas / (2 * x * lambdas - 1))
-  optim(par=c(0), fn=f, method="L-BFGS-B", lower=1/(2 * min(lambdas)) + 1e-3)$par
+  optim(par=c(0), fn=f, method="L-BFGS-B", lower=1/(2 * min(lambdas)) + 1e-4)$par
 }
 
 implicit.sgd <- function(x, y, rho, model="gaussian") {
   n = nrow(x)
   p = ncol(x)
   beta.hat = rep(0, p)
-  a.optimal = optimal.alpha(p, rho)  # not sensitive to that
-  # a.optimal = 1
+  a.optimal = 1 #optimal.alpha(p, rho)  # not sensitive to that
+  # print(sprintf("Optimal a=%.3f  r=%.3f", a.optimal, rho))
+  # Define transfer function.
+  h <- function(eta) {
+    if(model=="gaussian") {
+      return(eta)
+    } else if(model=="logistic") {
+      if(eta > 20) {
+        return(1)
+      } else if (eta < -20) {
+        return(0)
+      } else {
+        return(exp(eta) / (1 + exp(eta)))
+      }
+    } else {
+      stop(print(sprintf("Model %s is not supported..", model)))
+    }
+  }
+  
   learning.rate = 1 / (1 + (1/a.optimal) * seq(1, n))
+  solve.implicit <- function(ai, yi, eta.i, xi.norm, Bi) {
+    if(Bi[1]==Bi[2]) return(Bi[1])
+    f = function(w) w - ai * (yi - h(eta.i + xi.norm * w))
+    uniroot(f, interval=Bi, tol=1e-4)$root
+  }
+  
   for(i in 1:n) {
     xi = x[i, ]
+    xi.norm = sum(xi^2)
     yi = y[i]
-    yi.pred = sum(beta.hat * xi)
     ai = learning.rate[i]
-    ksi = ai * (yi - yi.pred) / (1 + sum(xi^2) * ai)
+    eta.i = sum(beta.hat * xi)
+    yi.pred = h(eta.i)
+    ri = ai * (yi - yi.pred)
+    Bi = c(0, ri)
+    if(ri <= 0)
+      Bi = c(ri, 0)
+    
+    # Solve implicit equation
+    ksi = NA
+    if(model=="gaussian") {
+      # For the Gaussia model this is easy.
+      ksi = ri / (1 + ai * xi.norm)
+    } else {
+      # Call implicit solver
+      ksi = solve.implicit(ai, yi, eta.i, xi.norm, Bi)
+    }
+    # Update beta vector.
     beta.hat = beta.hat + ksi * xi
   }
   return(beta.hat)
@@ -78,12 +123,43 @@ mse <- function(x, y) {
   sqrt(mean((x-y)^2))
 }
 
+mse.glmnet <- function(fit, true.beta) {
+  B = fit$beta
+  mse.lambda = sapply(1:ncol(B), function(j) {
+    x1 = as.numeric(B[, j])
+    mse(x1, true.beta) })
+  sort.mse.index = rev(order(mse.lambda))
+  k = length(sort.mse.index)
+  q1 = mse.lambda[sort.mse.index[as.integer(0.25 * k)]]
+  q2 = mse.lambda[sort.mse.index[as.integer(0.5 * k)]]
+  q3 = mse.lambda[sort.mse.index[as.integer(0.75 * k)]]
+  return(c(q1, q2, q3))
+}
+
+analyze.timings <- function(timings, rho.values, methods) {
+  times = as.data.frame(timings)
+  for(m in 1:length(methods)) {
+    print(sprintf("----> Results for method %s", methods[m]))
+    df = ddply(subset(times, method==m), .(rho), function(z) { c(mean(z$time), 
+                                                                 mean(z$mse1),
+                                                                 mean(z$mse2),
+                                                                 mean(z$mse3)) })
+    print(paste(rho.values, collapse= " & "))
+    print(sprintf("Times= %s", paste(round(df[,2], 3), collapse=" & ")))
+    print(sprintf("MSE (Q1) = %s", paste(round(df[,3], 3), collapse=" & ")))
+    print(sprintf("MSE (Q2) = %s", paste(round(df[,4], 3), collapse=" & ")))
+    print(sprintf("MSE (Q3) = %s", paste(round(df[,5], 3), collapse=" & ")))
+  }
+}
+
 run.experiment.glmnet <- function(dim.n, dim.p,
-                          rho.values=c(0.0, 0.2, 0.4, 0.6, 0.8),
-                          nreps=3, 
-                          methods=c("glmnet", "sgd")) {
+                                  model="gaussian",
+                                  rho.values=c(0.0, 0.1, 0.2, 0.5, 0.9, 0.95),
+                                  nreps=3, 
+                                  methods=c("glmnet", "sgd")) {
+  print(sprintf(">>> Running model %s...Methods= %s", model, paste(methods, collapse=",")))
   niters = 0
-  cols = c("rho", "rep", "time","mse", "method")
+  cols = c("rho", "rep", "time","mse1", "mse2", "mse3", "method")
   timings = matrix(nrow=0, ncol=length(cols))
   colnames(timings) <- cols
   rownames(timings) = NULL
@@ -96,32 +172,45 @@ run.experiment.glmnet <- function(dim.n, dim.p,
       for(method in methods) {
         niters = niters + 1
         set.seed(seeds[niters])
-        dataset = sample.data(dim.n, dim.p, rho)
+        dataset = sample.data(dim.n=dim.n, dim.p=dim.p, rho=rho, model=model)
         true.beta = dataset$beta
         x = dataset$X
         y = dataset$Y
+        true.beta = dataset$beta
+        CHECK(nrow(x) == dim.n)
+        CHECK(ncol(x) == dim.p)
         new.dt = 0
-        beta.est = NULL
+        new.mse = NA
+        
         if(method=="glmnet") {
-          new.dt = unix.time({ fit = glmnet(x,y, alpha=1, standardize=FALSE, type.gaussian="naive")})["user.self"]
-          B = fit$beta
-          best.j = which.min(sapply(1:ncol(B), function(j) {
-            x1 = as.numeric(B[, j])
-            mse(x1, true.beta) }))
-          beta.est = B[, best.j]
+          if(model=="gaussian") {
+            new.dt = system.time({ fit = glmnet(x, y, alpha=1, standardize=FALSE, type.gaussian="naive")})[1]
+          } else if(model=="logistic") {
+            new.dt = system.time({ fit = glmnet(x,y,standardize=FALSE,family="binomial") })[1]
+          }
+          new.mse = mse.glmnet(fit, true.beta)
+        } else if (method=="sgd") {
+          ## method==sgd
+          new.dt = system.time({ beta.est= implicit.sgd(x, y, rho, model=model) })[1]
+          mse.im = mse(beta.est, true.beta)
+          new.mse = rep(mse.im, 3)
         } else {
-          new.dt = unix.time({ beta.est= implicit.sgd(x, y, rho)})["user.self"]
+          stop(sprintf(">> Method %s is not supported ...", method))
         }
-        timings = rbind(timings, c(rho, i, round(new.dt, 5), 
-                                   round(mse(beta.est, true.beta), 3), 
-                                   method))
+        m = which(methods==method)
+        timings = rbind(timings, c(rho, i, 
+                                   new.dt, 
+                                   new.mse, m))
         setTxtProgressBar(pb, niters/total.iters)
       }
     }
     
   }
-  return(as.data.frame(timings))
+  analyze.timings(timings, rho.values, methods)
+  return(timings)
 }
+
+
 
 glmnet.wrapper=function(sx,ly,folds,lambda=lambda,standardize=FALSE,family="binomial"){
   nfolds=max(folds)
@@ -130,28 +219,3 @@ glmnet.wrapper=function(sx,ly,folds,lambda=lambda,standardize=FALSE,family="bino
   }
   return()
 }
-# TODO(ptoulis): Have a logistic regression example?
-# run.logit <- function(dim.n, dim.p,
-#                       rho.values=c(0.0, 0.1, 0.2),
-#                       nreps=3) {
-#   timings = matrix(nrow=0, ncol=2)
-#   colnames(timings) <- c("rho", "time")
-#   nlam=100
-#   nfolds=10
-#   pb = txtProgressBar(style=3)
-#   niters = 0
-#   for(rho in rho.values) {
-#     set.seed(22)
-#     niters = niters + 1
-#     dataset = sample.data(dim.n, dim.p, rho, model="logit")
-#     x = dataset$X
-#     y = dataset$Y
-#     # make sure n is a multiple of nfolds=10
-#     folds=sample(rep(1:nfolds, dim.n/nfolds))
-#     fit2=glmnet(x,y,standardize=FALSE,family="binomial")
-#     tim.fht=system.time(glmnet.wrapper(x,y,folds=folds,lam=fit2$lambda,standardize=FALSE,family="binomial"))[1]
-#     timings = rbind(timings, c(rho, as.numeric(tim.fht)))
-#     setTxtProgressBar(pb, niters/length(rho.values))
-#   }
-#   return(as.data.frame(timings))
-# }
