@@ -157,7 +157,9 @@ run.experiment.glmnet <- function(dim.n, dim.p,
                                   rho.values=c(0.0, 0.1, 0.2, 0.5, 0.9, 0.95),
                                   nreps=3, 
                                   methods=c("glmnet", "sgd")) {
-  print(sprintf(">>> Running model %s...Methods= %s", model, paste(methods, collapse=",")))
+  print(sprintf(">>> Running model %s...Methods= %s N=%d, p=%d", 
+                model, paste(methods, collapse=","),
+                dim.n, dim.p))
   niters = 0
   cols = c("rho", "rep", "time","mse1", "mse2", "mse3", "method")
   timings = matrix(nrow=0, ncol=length(cols))

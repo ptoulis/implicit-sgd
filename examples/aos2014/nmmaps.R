@@ -31,7 +31,7 @@ data.files <- list.files(path=DATA_DIR, full.names=T, pattern="bz2")
 ## `NMMAPSdata' package into R for more information.  `fitSingleCity'
 ## will not work correctly with the full/raw database.
 rm(list=ls())
-
+library(ggplot2)
 library(splines)
 
 merge.all.data <- function() {
@@ -173,7 +173,7 @@ fit.all.implicit <- function(X) {
   }
   return(theta.hat)
 }
-
+mse <- function(x, y) sqrt(mean((x-y)^2))
 run.experiment.nmmaps <- function(data.size="small") {
   print(sprintf("Loading data...(size=%s)", data.size))
   if(data.size=="small") {
@@ -186,12 +186,16 @@ run.experiment.nmmaps <- function(data.size="small") {
     df$death = as.integer(df$death)
     print("> Running glm()...")
     fit = glm(death ~ . + 0, family=poisson, data=df)
-    b1 = as.numeric(coef(fit))
+    glm.estimates = as.numeric(coef(fit))
     print("> Running implicit...")
-    b2 = fit.all.implicit(X.small)
-    print(sprintf("MSE = %.3f", sqrt(mean((b1-b2)^2))))
-    plot(b1, b2, pch=20, xlab="lm() parameters", ylab="implicit estimates")
-    lines(b1, b1, col="red", lty=3, lwd=0.5) 
+    sgd.estimates = fit.all.implicit(X.small)
+    print(sprintf("MSE = %.3f", mse(sgd.estimates, glm.estimates)))
+    df = data.frame(glm=glm.estimates, sgd=sgd.estimates)
+    g = ggplot() + geom_point(data=df, aes(x=glm, y=sgd)) + 
+      geom_line(data=df, aes(x=glm, y=glm), lty=2)
+    g
+    #  + geom_line(aes(x=glm.estimates, y=glm_estimates))
+    # lines(b1, b1, col="red", lty=3, lwd=0.5) 
   } else if(data.size=="big") {
     load("datasets/X.all.rda")
     print(sprintf("> Design matrix X: %d obs. %d covariates. Memory Size=%.1f Mb", 
