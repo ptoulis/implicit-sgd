@@ -128,7 +128,8 @@ run.implicit.sgd <- function(dim.p, dim.n) {
     # 5c. Determine optimal learning rate for this chunk.
     #   Sample 10000 rows and then calculate E(x x') and the eigenvalues.
     #   Enter only if p is relatively small.
-    if(p <= 1e3 && (h==1 || !update.alpha.once)) {
+    alpha.optimal = 1 / 0.08 # this can be easily tweaked to be set automatically.
+    if(p <= 1e2 && (h==1 || !update.alpha.once)) {
       print("> Calculating optimal learning rate.")
       lr.t0 = proc.time()[["elapsed"]]
       J = matrix(0, nrow=p, ncol=p)
@@ -146,6 +147,7 @@ run.implicit.sgd <- function(dim.p, dim.n) {
     } else {
       print("> Skipping update of learning rate.")
     }
+  
     # 5d. Main loop on "good examples" (see above)
     for(i in good.examples) {
       xi = D[i, x.vars] # current covariate vector

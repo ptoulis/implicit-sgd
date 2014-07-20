@@ -9,13 +9,21 @@ library(mvtnorm)
 library(glmnet)
 library(plyr)
 
+diff <- function(p) {
+  b1=((-1)^(1:p))*exp(-2*((1:p)-1)/20)
+  b2=((-1)^(1:p))*(1:p)^{-0.65}
+  plot(b1, col="red", type="l")
+  lines(b2, col="green")
+}
 # genjerry, genx2 are functions taken from the above paper.
 # These functions generate the simulation data.
 genjerry = function(x,snr){
   # generate data according to Friedman's setup
   n=nrow(x)
   p=ncol(x)
-  b=((-1)^(1:p))*exp(-2*( (1:p)-1)/20)
+  b=((-1)^(1:p))*exp(-2*((1:p)-1)/20)
+  # b=sample(c(-0.8, -0.45, 0.45, 0.9, 1.4), size=p, replace=T)
+  # ((-1)^(1:p))*(1:p)^{-0.65}#exp(-2*((1:p)-1)/20)
   f=x%*%b
   e=rnorm(n)
   k=sqrt(var(f)/(snr*var(e)))
@@ -64,7 +72,7 @@ implicit.sgd <- function(x, y, rho, model="gaussian") {
   n = nrow(x)
   p = ncol(x)
   beta.hat = rep(0, p)
-  a.optimal = 1 #optimal.alpha(p, rho)  # not sensitive to that
+  a.optimal = ifelse(model=="gaussian", 1, 4)
   # print(sprintf("Optimal a=%.3f  r=%.3f", a.optimal, rho))
   # Define transfer function.
   h <- function(eta) {
@@ -241,10 +249,9 @@ create.glmnet.table <- function(model="gaussian", nreps=5) {
   print(sprintf(">> Creating table glmnet. Model=%s, reps=%d", model, nreps))
   rho.values = c(0.0, 0.2, 0.6, 0.9)
   methods = c("glmnet", "sgd")
-  np.matrix <- matrix(c(1000, 100,
-                        5000, 100,
-                        100, 1000,
-                        100, 5000), ncol=2, byrow=T)
+  np.matrix <- matrix(c(1000, 10,
+                        5000, 50,
+                        100000, 200), ncol=2, byrow=T)
   
   rep.str <- function(x, ntimes) {
     paste(rep(x, ntimes), collapse="")
