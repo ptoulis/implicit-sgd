@@ -104,7 +104,7 @@ vector.dist <- function(x, y) {
   if(length(x) != length(y))
     stop("Vectors should have equal length to calculate distance.")
   # Compute MSE.
-  sqrt(sum((x-y)^2))
+  sqrt(mean((x-y)^2))
 }
 
 CHECK <- function(claim, msg) {
