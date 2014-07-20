@@ -72,6 +72,7 @@ implicit.sgd <- function(x, y, rho, model="gaussian") {
   n = nrow(x)
   p = ncol(x)
   beta.hat = rep(0, p)
+  # TODO(ptoulis): This can be determined automatically.
   a.optimal = ifelse(model=="gaussian", 1, 4)
   # print(sprintf("Optimal a=%.3f  r=%.3f", a.optimal, rho))
   # Define transfer function.
