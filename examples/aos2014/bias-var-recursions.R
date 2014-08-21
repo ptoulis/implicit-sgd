@@ -21,12 +21,15 @@ best.learning.rate <- function(M) {
         fn = function(x) sum(x^2 / (x * lam - 1)))$par
 }
 
-recursion.first.order <- function(D, alpha=0.2, 
+recursion.first.order <- function(D=c(), alpha=0.2, constant.rate=F, 
                                   niters=1000,
                                   implicit=F) {
+  if(length(D)==0) {
+    warning("Data were empty. Creating default with p=10")
+    D = init.matrix(p=10)
+  }
   # Runs the recursion
-  #
-  # Xn = (I - an B) * Xn-1 + an * V
+  #   Xn = (I - an B) * Xn-1 + an * V
   B = D$B
   I = D$I
   V = D$V
@@ -37,6 +40,9 @@ recursion.first.order <- function(D, alpha=0.2,
   if(any(eigen(Y.lim)$values < 0) | any(eigen(V)$values < 0)) {
     stop("Eigenvalues of B cannot be negative.")
   }
+  if(any(eigen(I - alpha * B)$values < 0)) {
+    warning(sprintf("Likely to be unstable. Try values for alpha < %.3f", 2 / max(eigen(B)$values)))
+  }
   # Current iterate.
   Xi = matrix(0, nrow=p, ncol=p)
   # residuals.
@@ -45,6 +51,9 @@ recursion.first.order <- function(D, alpha=0.2,
   for(i in 1:niters) {
     # 1. Compute learning rate
     ai  = alpha / (alpha + i)
+    if(constant.rate) {
+      ai = alpha
+    }
     if(implicit) {
       Xi = solve(I + ai * B) %*% (Xi + ai * V)
     } else {
